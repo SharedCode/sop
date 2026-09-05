@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/joltrin"
 )
 
 func TestManageVectorDB_ErrorPaths_Extended(t *testing.T) {

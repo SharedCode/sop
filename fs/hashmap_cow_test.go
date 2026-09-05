@@ -9,8 +9,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/common/mocks"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/common/mocks"
 )
 
 func TestCow_BasicLifecycle(t *testing.T) {

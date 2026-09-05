@@ -17,7 +17,7 @@ SOP includes a powerful **Data Management Suite** that provides **full CRUD** ca
 *   **AI Copilot**: Integrated directly into the UI, the AI Copilot can help you write queries, explain data structures, and even generate code snippets.
 *   **SystemDB**: View and manage internal system data, including registry information and transaction logs.
 
-To launch the Data Manager, download the all-in-one single-file installer from [SOP Releases](https://github.com/SharedCode/zeltrin/releases). Alternatively, you can use the Go toolchain:
+To launch the Data Manager, download the all-in-one single-file installer from [SOP Releases](https://github.com/SharedCode/joltrin/releases). Alternatively, you can use the Go toolchain:
 
 ```bash
 # From the root of the repository

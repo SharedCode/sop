@@ -3,8 +3,8 @@ package common
 import (
 	"testing"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/common/mocks"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/common/mocks"
 )
 
 // Covers all of these cases:

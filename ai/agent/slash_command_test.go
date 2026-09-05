@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sharedcode/zeltrin/ai"
-	"github.com/sharedcode/zeltrin/ai/agent/parser"
+	"github.com/sharedcode/joltrin/ai"
+	"github.com/sharedcode/joltrin/ai/agent/parser"
 )
 
 func TestCopilotAgent_Ask_SlashCommand(t *testing.T) {

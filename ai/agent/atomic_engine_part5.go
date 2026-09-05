@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sharedcode/zeltrin/jsondb"
+	"github.com/sharedcode/joltrin/jsondb"
 )
 
 func (e *ScriptEngine) Filter(ctx context.Context, input any, args map[string]any) (any, error) {

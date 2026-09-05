@@ -10,9 +10,9 @@ import (
 
 	log "log/slog"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/encoding"
-	"github.com/sharedcode/zeltrin/jsondb"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/encoding"
+	"github.com/sharedcode/joltrin/jsondb"
 )
 
 //export navigateBtree

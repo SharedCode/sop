@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/joltrin"
 )
 
 func Test_ValueDataInSeparateSegment_Rollback(t *testing.T) {

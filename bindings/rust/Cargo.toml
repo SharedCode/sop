@@ -2,9 +2,9 @@
 name = "sop"
 version = "5.3.8"
 edition = "2021"
-description = "Rust bindings for Zeltrin (formerly SOP)"
+description = "Rust bindings for Joltrin (formerly SOP)"
 license = "MIT"
-repository = "https://github.com/SharedCode/zeltrin"
+repository = "https://github.com/SharedCode/joltrin"
 
 [dependencies]
 libc = "0.2"

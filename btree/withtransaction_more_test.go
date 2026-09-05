@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/joltrin"
 )
 
 // fakeNRWithErr extends fakeNR to optionally return an error on Get.

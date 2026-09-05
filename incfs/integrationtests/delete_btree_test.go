@@ -6,8 +6,8 @@ package integrationtests
 import (
 	"testing"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/incfs"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/incfs"
 )
 
 // Add Test_ prefix if you want to run this test.

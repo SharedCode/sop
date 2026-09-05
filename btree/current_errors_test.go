@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/joltrin"
 )
 
 type fakeNRGetErr[TK Ordered, TV any] struct{ fakeNR[TK, TV] }

@@ -3,7 +3,7 @@ package agent
 import (
 	"testing"
 
-	"github.com/sharedcode/zeltrin/jsondb"
+	"github.com/sharedcode/joltrin/jsondb"
 )
 
 func TestRightSortOptimization_Valid(t *testing.T) {

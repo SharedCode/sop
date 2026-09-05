@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/sharedcode/zeltrin/ai"
-	"github.com/sharedcode/zeltrin/ai/embed"
+	"github.com/sharedcode/joltrin/ai"
+	"github.com/sharedcode/joltrin/ai/embed"
 )
 
 type embedderSettings struct {

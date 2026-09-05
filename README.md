@@ -1,6 +1,6 @@
 <div align="center">
 
-# ⚡ Zeltrin ⚡
+# ⚡ Joltrin ⚡
 
 ### From milliseconds to microseconds: durable memory and verification infrastructure for AI agents.
 
@@ -9,44 +9,44 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/zeltrin-logo.svg" alt="Zeltrin logo" width="480" />
+  <img src="docs/assets/joltrin-logo.svg" alt="Joltrin logo" width="480" />
 </p>
 
-[![Discussions](https://img.shields.io/github/discussions/SharedCode/zeltrin)](https://github.com/SharedCode/zeltrin/discussions)
-[![CI](https://github.com/SharedCode/zeltrin/actions/workflows/go.yml/badge.svg?branch=master)](https://github.com/SharedCode/zeltrin/actions/workflows/go.yml)
-[![Release](https://img.shields.io/github/v/release/SharedCode/zeltrin)](https://github.com/SharedCode/zeltrin/releases)
-[![codecov](https://codecov.io/gh/SharedCode/zeltrin/branch/master/graph/badge.svg)](https://app.codecov.io/github/SharedCode/zeltrin)
-[![Go Reference](https://pkg.go.dev/badge/github.com/sharedcode/zeltrin.svg)](https://pkg.go.dev/github.com/sharedcode/zeltrin)
-[![Go version](https://img.shields.io/github/go-mod/go-version/SharedCode/zeltrin)](go.mod)
-[![License](https://img.shields.io/github/license/SharedCode/zeltrin)](LICENSE)
-[![Live Demos](https://img.shields.io/badge/Live_Demos-GitHub_Pages-10B981?logo=github)](https://sharedcode.github.io/zeltrin/arena/)
+[![Discussions](https://img.shields.io/github/discussions/SharedCode/joltrin)](https://github.com/SharedCode/joltrin/discussions)
+[![CI](https://github.com/SharedCode/joltrin/actions/workflows/go.yml/badge.svg?branch=master)](https://github.com/SharedCode/joltrin/actions/workflows/go.yml)
+[![Release](https://img.shields.io/github/v/release/SharedCode/joltrin)](https://github.com/SharedCode/joltrin/releases)
+[![codecov](https://codecov.io/gh/SharedCode/joltrin/branch/master/graph/badge.svg)](https://app.codecov.io/github/SharedCode/joltrin)
+[![Go Reference](https://pkg.go.dev/badge/github.com/sharedcode/joltrin.svg)](https://pkg.go.dev/github.com/sharedcode/joltrin)
+[![Go version](https://img.shields.io/github/go-mod/go-version/SharedCode/joltrin)](go.mod)
+[![License](https://img.shields.io/github/license/SharedCode/joltrin)](LICENSE)
+[![Live Demos](https://img.shields.io/badge/Live_Demos-GitHub_Pages-10B981?logo=github)](https://sharedcode.github.io/joltrin/arena/)
 [![MCP](https://img.shields.io/badge/MCP-tools%2Fmcpserver-4A4A4A)](docs/MCP_A2A_AND_VERIFICATION_ENGINE.md)
 [![A2A](https://img.shields.io/badge/A2A-tools%2Fa2aagent-4A4A4A)](docs/MCP_A2A_AND_VERIFICATION_ENGINE.md)
 
 </div>
 
-**Zeltrin** (formerly SOP / Scalable Object Persistence) is a unified in-process state engine providing transactional persistence, durable agent memory, distributed storage primitives, explicit-state verification, and WebAssembly persistence. It combines a sector-aligned **copy-on-write B-Tree**, **checkpointed episodic agent memory**, **vector similarity search**, and a **deterministic safety verification barrier** for MCP and A2A runbooks into one library.
+**Joltrin** (formerly SOP / Scalable Object Persistence) is a unified in-process state engine providing transactional persistence, durable agent memory, distributed storage primitives, explicit-state verification, and WebAssembly persistence. It combines a sector-aligned **copy-on-write B-Tree**, **checkpointed episodic agent memory**, **vector similarity search**, and a **deterministic safety verification barrier** for MCP and A2A runbooks into one library.
 
-Instead of managing separate vector databases, message brokers, caching tiers, distributed lock managers, and fragile external checkpoint stores, Zeltrin lets your AI agents maintain crash-resilient memory and enforce operational invariants directly within the execution boundary.
+Instead of managing separate vector databases, message brokers, caching tiers, distributed lock managers, and fragile external checkpoint stores, Joltrin lets your AI agents maintain crash-resilient memory and enforce operational invariants directly within the execution boundary.
 
-> **Why "from milliseconds to microseconds"?** Traditional multi-tier architectures incur an estimated 15-50ms network round-trip penalty across external services (Redis, message queues, relational databases). Zeltrin runs embedded in-process, shifting latency from milliseconds to microseconds: empirical benchmarks measure **<0.3ms** end-to-end in-process execution, **~6.87µs** per B-Tree write (>145,000 ops/sec), and **~6.95µs** per read (>143,000 ops/sec) with full ACID consistency.  
-> 🔗 **Proof & Benchmark Reference:** [View Detailed Benchmarks & Microsecond Breakdown →](#-performance-benchmarks) · Benchmark suite: [`tools/benchmark`](tools/benchmark) · Live client-side run: [Technical WASM Demo](https://sharedcode.github.io/zeltrin/)
+> **Why "from milliseconds to microseconds"?** Traditional multi-tier architectures incur an estimated 15-50ms network round-trip penalty across external services (Redis, message queues, relational databases). Joltrin runs embedded in-process, shifting latency from milliseconds to microseconds: empirical benchmarks measure **<0.3ms** end-to-end in-process execution, **~6.87µs** per B-Tree write (>145,000 ops/sec), and **~6.95µs** per read (>143,000 ops/sec) with full ACID consistency.  
+> 🔗 **Proof & Benchmark Reference:** [View Detailed Benchmarks & Microsecond Breakdown →](#-performance-benchmarks) · Benchmark suite: [`tools/benchmark`](tools/benchmark) · Live client-side run: [Technical WASM Demo](https://sharedcode.github.io/joltrin/)
 
 <p align="center">
-  <img src="docs/assets/zeltrin-demo.gif" alt="Live Zeltrin demo: in-process ACID transactions, distributed Arena simulation, and deterministic AI agent verification barrier" width="760" />
+  <img src="docs/assets/joltrin-demo.gif" alt="Live Joltrin demo: in-process ACID transactions, distributed Arena simulation, and deterministic AI agent verification barrier" width="760" />
 </p>
 
 <p align="center">
-  <a href="https://sharedcode.github.io/zeltrin/"><strong>🧠 Launch Technical Demo →</strong></a> &nbsp;&nbsp;|&nbsp;&nbsp;
-  <a href="https://sharedcode.github.io/zeltrin/arena/"><strong>🎮 Play Zeltrin Arena →</strong></a> &nbsp;&nbsp;|&nbsp;&nbsp;
-  <a href="https://sharedcode.github.io/zeltrin/agents/"><strong>🔌 Launch Agent Barrier →</strong></a>
+  <a href="https://sharedcode.github.io/joltrin/"><strong>🧠 Launch Technical Demo →</strong></a> &nbsp;&nbsp;|&nbsp;&nbsp;
+  <a href="https://sharedcode.github.io/joltrin/arena/"><strong>🎮 Play Joltrin Arena →</strong></a> &nbsp;&nbsp;|&nbsp;&nbsp;
+  <a href="https://sharedcode.github.io/joltrin/agents/"><strong>🔌 Launch Agent Barrier →</strong></a>
 </p>
 
 | Experience | Description | Live Interactive Link |
 | :--- | :--- | :--- |
-| 🧠 **Zeltrin Technical Demo** | **Client-Side Zero-Server WebAssembly Engine**<br>Execute live ACID transactions, 128-dimensional vector cosine searches, microsecond benchmarks, and durable AI agent memory checkpoints (kill the agent mid-task, watch a successor resume from the B-Tree) running 100% in your browser with **0 runtime HTTP network calls after initial load**. | [**Launch Technical Demo →**](https://sharedcode.github.io/zeltrin/) |
-| 🎮 **Zeltrin Arena** | **Distributed Systems Survival Simulation**<br>Command a live digital cluster. Scale worker swarms, crash storage nodes, trigger transaction storms, and watch Zeltrin automatically redistribute tasks and rebuild parity in real-time. | [**Play Zeltrin Arena →**](https://sharedcode.github.io/zeltrin/arena/) |
-| 🔌 **Zeltrin Agent Verification Barrier** | **The MCP/A2A Safety Check, Clickable**<br>The same `ai/verify` barrier gating `tools/mcpserver` and `tools/a2aagent`, compiled to WASM. Try dropping a database before validating a backup and watch it get blocked, in your browser, with the trace persisted to OPFS. | [**Launch Agent Barrier →**](https://sharedcode.github.io/zeltrin/agents/) |
+| 🧠 **Joltrin Technical Demo** | **Client-Side Zero-Server WebAssembly Engine**<br>Execute live ACID transactions, 128-dimensional vector cosine searches, microsecond benchmarks, and durable AI agent memory checkpoints (kill the agent mid-task, watch a successor resume from the B-Tree) running 100% in your browser with **0 runtime HTTP network calls after initial load**. | [**Launch Technical Demo →**](https://sharedcode.github.io/joltrin/) |
+| 🎮 **Joltrin Arena** | **Distributed Systems Survival Simulation**<br>Command a live digital cluster. Scale worker swarms, crash storage nodes, trigger transaction storms, and watch Joltrin automatically redistribute tasks and rebuild parity in real-time. | [**Play Joltrin Arena →**](https://sharedcode.github.io/joltrin/arena/) |
+| 🔌 **Joltrin Agent Verification Barrier** | **The MCP/A2A Safety Check, Clickable**<br>The same `ai/verify` barrier gating `tools/mcpserver` and `tools/a2aagent`, compiled to WASM. Try dropping a database before validating a backup and watch it get blocked, in your browser, with the trace persisted to OPFS. | [**Launch Agent Barrier →**](https://sharedcode.github.io/joltrin/agents/) |
 
 ---
 
@@ -55,7 +55,7 @@ Instead of managing separate vector databases, message brokers, caching tiers, d
 Clone the repository and run the unified interactive demo:
 
 ```bash
-git clone https://github.com/sharedcode/zeltrin.git && cd zeltrin && ./scripts/demo.sh
+git clone https://github.com/sharedcode/joltrin.git && cd joltrin && ./scripts/demo.sh
 ```
 
 The interactive script lets you execute and verify each workflow shown on this page:
@@ -86,7 +86,7 @@ No local Go toolchain? Run the exact same demo suite inside Docker:
 docker run --rm -it -v "$PWD":/src -w /src golang:1.26-alpine ./scripts/demo.sh
 
 # Or run the published quickstart container from GHCR
-docker run --rm ghcr.io/sharedcode/zeltrin-quickstart
+docker run --rm ghcr.io/sharedcode/joltrin-quickstart
 ```
 
 ### 📉 Engineering ROI, Verified in This Repo
@@ -99,21 +99,21 @@ No revenue or customer numbers exist yet for this project (see [For Investors](#
 | **Stateful services to operate, patch, and page on** | Redis + Kafka/RabbitMQ + Postgres/Cassandra + ZooKeeper (4+) | 1 embedded library |
 | **Language surfaces shipped** | N/A | Go (native), Python (`sop4py` on PyPI), C# (`Sop` on NuGet); Java and Rust bindings exist in-repo with tests, not yet published |
 | **CI rigor on every change** | N/A | `govulncheck` clean on every push; race detector on the core engine packages (`btree`, `common`, `fs`, `inmemory`); 3-OS build and test matrix (Linux, macOS, Windows) |
-| **Deployment footprint of the technical demo** | A server-backed demo stack | WASM build running ACID transactions, vector search, and agent-memory checkpointing 100% client-side, 0 runtime HTTP calls after page load ([live](https://sharedcode.github.io/zeltrin/)) |
+| **Deployment footprint of the technical demo** | A server-backed demo stack | WASM build running ACID transactions, vector search, and agent-memory checkpointing 100% client-side, 0 runtime HTTP calls after page load ([live](https://sharedcode.github.io/joltrin/)) |
 
 Every row above is something you can run yourself, not a projection. See [Performance Benchmarks](#-performance-benchmarks) for the throughput numbers behind the latency claim, and [What Has Not Yet Been Proven](#-for-investors) for what this table deliberately leaves out.
 
 ---
 
-## 🚀 Experience Zeltrin
+## 🚀 Experience Joltrin
 
-You can test Zeltrin directly in your browser without installing anything. Start with the technical demo: it demonstrates the engine's core power directly, safe, ACID-transactional storage running on web storage itself (OPFS), with zero server and zero network calls after the initial page loads the WASM binary. Everything else on this page, including the agent verification barrier below, is built on top of that same engine, a reference implementation showing one concrete use case:
+You can test Joltrin directly in your browser without installing anything. Start with the technical demo: it demonstrates the engine's core power directly, safe, ACID-transactional storage running on web storage itself (OPFS), with zero server and zero network calls after the initial page loads the WASM binary. Everything else on this page, including the agent verification barrier below, is built on top of that same engine, a reference implementation showing one concrete use case:
 
 | Experience | Description | Live Interactive Link |
 | :--- | :--- | :--- |
-| 🧠 **Zeltrin Technical Demo** | **Client-Side Zero-Server WebAssembly Engine**<br>Execute live ACID transactions, 128-dimensional vector cosine searches, microsecond benchmarks, and durable AI agent memory checkpoints (kill the agent mid-task, watch a successor resume from the B-Tree) running 100% in your browser with **0 runtime HTTP network calls after initial load**. | [**Launch Technical Demo →**](https://sharedcode.github.io/zeltrin/) |
-| 🎮 **Zeltrin Arena** | **Distributed Systems Survival Simulation**<br>Command a live digital cluster. Scale worker swarms, crash storage nodes, trigger transaction storms, and watch Zeltrin automatically redistribute tasks and rebuild parity in real-time. | [**Play Zeltrin Arena →**](https://sharedcode.github.io/zeltrin/arena/) |
-| 🔌 **Zeltrin Agent Verification Barrier** | **The MCP/A2A Safety Check, Clickable**<br>The same `ai/verify` barrier gating `tools/mcpserver` and `tools/a2aagent`, compiled to WASM. Try dropping a database before validating a backup and watch it get blocked, in your browser, with the trace persisted to OPFS. | [**Launch Agent Barrier →**](https://sharedcode.github.io/zeltrin/agents/) |
+| 🧠 **Joltrin Technical Demo** | **Client-Side Zero-Server WebAssembly Engine**<br>Execute live ACID transactions, 128-dimensional vector cosine searches, microsecond benchmarks, and durable AI agent memory checkpoints (kill the agent mid-task, watch a successor resume from the B-Tree) running 100% in your browser with **0 runtime HTTP network calls after initial load**. | [**Launch Technical Demo →**](https://sharedcode.github.io/joltrin/) |
+| 🎮 **Joltrin Arena** | **Distributed Systems Survival Simulation**<br>Command a live digital cluster. Scale worker swarms, crash storage nodes, trigger transaction storms, and watch Joltrin automatically redistribute tasks and rebuild parity in real-time. | [**Play Joltrin Arena →**](https://sharedcode.github.io/joltrin/arena/) |
+| 🔌 **Joltrin Agent Verification Barrier** | **The MCP/A2A Safety Check, Clickable**<br>The same `ai/verify` barrier gating `tools/mcpserver` and `tools/a2aagent`, compiled to WASM. Try dropping a database before validating a backup and watch it get blocked, in your browser, with the trace persisted to OPFS. | [**Launch Agent Barrier →**](https://sharedcode.github.io/joltrin/agents/) |
 
 The technical demo persists across reloads now, to Origin Private File System, via the browser's async File System Access API. The diagram below is the real tradeoff behind that choice, not a benchmark; no throughput numbers are shown because none have been measured for either path in this repo.
 
@@ -127,13 +127,13 @@ That same WASM-compiled engine is what the Agent Verification Barrier row above 
 
 ## 🔌 Agent Protocols: MCP, A2A, and a Real Verification Barrier
 
-Zeltrin runbooks are reachable from two agent protocols, [Model Context Protocol](https://modelcontextprotocol.io/) and [Agent2Agent](https://a2a-project.github.io/A2A/), both gated by the same safety-and-reachability check before a step is allowed to commit. Real, tested code (`ai/verify`, `tools/mcpserver`, `tools/a2aagent`), not a diagram of an idea; see [MCP, A2A, and the Verification Engine](docs/MCP_A2A_AND_VERIFICATION_ENGINE.md) for the full audit and design writeup.
+Joltrin runbooks are reachable from two agent protocols, [Model Context Protocol](https://modelcontextprotocol.io/) and [Agent2Agent](https://a2a-project.github.io/A2A/), both gated by the same safety-and-reachability check before a step is allowed to commit. Real, tested code (`ai/verify`, `tools/mcpserver`, `tools/a2aagent`), not a diagram of an idea; see [MCP, A2A, and the Verification Engine](docs/MCP_A2A_AND_VERIFICATION_ENGINE.md) for the full audit and design writeup.
 
 <p align="center">
   <img src="docs/assets/mcp-a2a-architecture.svg" alt="An MCP client and an A2A orchestrator each reach a separate protocol server, both backed by the same tools/runbookstore.Store and gated by the same ai/verify safety check before a step commits" width="900" />
 </p>
 
-**Try the barrier yourself, live: [sharedcode.github.io/zeltrin/agents](https://sharedcode.github.io/zeltrin/agents/).** GitHub Pages can't run a real MCP or A2A network server (no backend), so this page runs the actual `ai/verify` check compiled to WASM, wired to buttons instead of protocol calls, the same logic those servers call before committing a step. Click "Drop Prod DB" first and watch it block; the trace persists to OPFS, so a reload picks up where you left off. This is a real recording of that page, not a mockup:
+**Try the barrier yourself, live: [sharedcode.github.io/joltrin/agents](https://sharedcode.github.io/joltrin/agents/).** GitHub Pages can't run a real MCP or A2A network server (no backend), so this page runs the actual `ai/verify` check compiled to WASM, wired to buttons instead of protocol calls, the same logic those servers call before committing a step. Click "Drop Prod DB" first and watch it block; the trace persists to OPFS, so a reload picks up where you left off. This is a real recording of that page, not a mockup:
 
 <p align="center">
   <img src="docs/assets/agent-barrier-demo.gif" alt="Real browser recording of the live agent verification barrier demo: dropping the database is blocked until backup and validation steps actually commit, then the same drop is allowed" width="900" />
@@ -174,7 +174,7 @@ go run ./cmd/sop-a2a-bridge -agent-url http://localhost:8087
 ```json
 {
   "mcpServers": {
-    "zeltrin": {
+    "joltrin": {
       "command": "go",
       "args": ["run", "./cmd/sop-mcp-server"],
       "cwd": "/absolute/path/to/sop"
@@ -188,7 +188,7 @@ Swap `"command"/"args"` for a prebuilt binary once you've run `go build -o sop-m
 ```json
 {
   "mcpServers": {
-    "zeltrin": {
+    "joltrin": {
       "command": "/absolute/path/to/sop/sop-mcp-server"
     }
   }
@@ -198,7 +198,7 @@ Swap `"command"/"args"` for a prebuilt binary once you've run `go build -o sop-m
 **Claude Code** (CLI):
 
 ```bash
-claude mcp add --transport stdio zeltrin -- go run ./cmd/sop-mcp-server
+claude mcp add --transport stdio joltrin -- go run ./cmd/sop-mcp-server
 ```
 
 ### Wiring `sop-a2a-agent` into Claude (via `sop-a2a-bridge`)
@@ -217,7 +217,7 @@ go run ./cmd/sop-a2a-bridge -agent-url http://localhost:8087
 ```json
 {
   "mcpServers": {
-    "zeltrin-a2a": {
+    "joltrin-a2a": {
       "command": "go",
       "args": ["run", "./cmd/sop-a2a-bridge", "-agent-url", "http://localhost:8087"],
       "cwd": "/absolute/path/to/sop"
@@ -229,7 +229,7 @@ go run ./cmd/sop-a2a-bridge -agent-url http://localhost:8087
 **Claude Code** (CLI):
 
 ```bash
-claude mcp add --transport stdio zeltrin-a2a -- go run ./cmd/sop-a2a-bridge -agent-url http://localhost:8087
+claude mcp add --transport stdio joltrin-a2a -- go run ./cmd/sop-a2a-bridge -agent-url http://localhost:8087
 ```
 
 ### Barrier policies `ai/verify` enforces
@@ -247,7 +247,7 @@ What this checker is, precisely, matters more than what it sounds like it might 
 
 ---
 
-## 💡 What Problem Does Zeltrin Solve?
+## 💡 What Problem Does Joltrin Solve?
 
 Most distributed applications require two fundamentally different operations:
 1. **Storing state reliably** (databases, key-value stores, vector indexes)
@@ -256,7 +256,7 @@ Most distributed applications require two fundamentally different operations:
 Today, developers solve this by assembling a multi-component infrastructure stack:
 
 ```
-THE FRAGMENTED MULTI-COMPONENT STACK (Without Zeltrin):
+THE FRAGMENTED MULTI-COMPONENT STACK (Without Joltrin):
 
 [ Application ]
        │
@@ -272,18 +272,18 @@ When an application worker crashes between releasing a lock in Redis and committ
 
 ---
 
-## ⚡ Why Zeltrin?
+## ⚡ Why Joltrin?
 
-Zeltrin takes a different approach: **co-locate storage and compute inside the same engine boundary.**
+Joltrin takes a different approach: **co-locate storage and compute inside the same engine boundary.**
 
 ```
-THE UNIFIED DATA & COMPUTE PLATFORM (With Zeltrin):
+THE UNIFIED DATA & COMPUTE PLATFORM (With Joltrin):
 
 [ Application ]
        │
        └──► (Embedded In-Process Call: < 0.3ms latency)
             ┌─────────────────────────────────────────────────────────────┐
-            │                        ZELTRIN ENGINE                       │
+            │                        JOLTRIN ENGINE                       │
             │  • Persistent B-Tree Storage (Sector-aligned Direct I/O)    │
             │  • Strict Serializable ACID Transactions (WAL + 2PC)       │
             │  • Swarm Compute & Autonomous Task Redistribution           │
@@ -308,9 +308,9 @@ Three industry shifts make this architecture increasingly relevant:
 
 ---
 
-## 🔍 What Makes Zeltrin Different?
+## 🔍 What Makes Joltrin Different?
 
-Zeltrin is built on five core technical principles:
+Joltrin is built on five core technical principles:
 
 1. **Embedded Storage Engine**: Operates in-process in Go, Python, and C#, eliminating TCP network hops for local reads and writes.
 2. **ACID Transactions without Database Servers**: Implements Write-Ahead Logging (WAL) and Two-Phase Commit (2PC) with copy-on-write page isolation.
@@ -320,11 +320,11 @@ Zeltrin is built on five core technical principles:
 
 ---
 
-## ⚖️ Zeltrin vs. Alternatives
+## ⚖️ Joltrin vs. Alternatives
 
-Every architecture involves tradeoffs. Here is an honest comparison of where Zeltrin fits relative to industry standards:
+Every architecture involves tradeoffs. Here is an honest comparison of where Joltrin fits relative to industry standards:
 
-| Capability | PostgreSQL | Redis | Kafka | Temporal | Pinecone | SQLite | Zeltrin |
+| Capability | PostgreSQL | Redis | Kafka | Temporal | Pinecone | SQLite | Joltrin |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | **ACID Transactions** | ✓ | △ | ✗ | ✗ | ✗ | ✓ | ✓ |
 | **Ordered B-Tree Range Scans** | ✓ | △ | ✗ | ✗ | ✗ | ✓ | ✓ |
@@ -338,15 +338,15 @@ Every architecture involves tradeoffs. Here is an honest comparison of where Zel
 
 ### Detailed Tradeoffs by Competitor:
 
-- **PostgreSQL**: Industry standard for general relational databases. Choose Postgres when you need complex relational schemas, advanced SQL aggregations, or standard ecosystem tooling. Zeltrin is better suited when you want an embedded storage engine inside your application process without database server management.
-- **Redis**: Industry standard for ultra-low-latency in-memory key-value caching. Choose Redis when all data fits in RAM and you need simple cache operations. Zeltrin provides durable B-Tree disk persistence, multi-account ACID transactions, and erasure coding.
-- **Kafka / RabbitMQ**: Industry standards for high-volume streaming and pub/sub. Choose Kafka when you need multi-datacenter event streams and log retention. Zeltrin provides transactional task queues co-located with storage state for local swarms.
-- **Temporal**: Industry standard for long-running durable workflows spanning external microservices. Choose Temporal for multi-week human-in-the-loop workflows across disparate clouds. Zeltrin is designed for local-to-cluster co-located data and task execution.
-- **SQLite**: Industry standard for embedded single-file relational databases. Choose SQLite for client desktop/mobile apps needing SQL. Zeltrin is designed for high-concurrency multi-threaded workers, clustered coordination, partitioned vector stores, and erasure coding.
+- **PostgreSQL**: Industry standard for general relational databases. Choose Postgres when you need complex relational schemas, advanced SQL aggregations, or standard ecosystem tooling. Joltrin is better suited when you want an embedded storage engine inside your application process without database server management.
+- **Redis**: Industry standard for ultra-low-latency in-memory key-value caching. Choose Redis when all data fits in RAM and you need simple cache operations. Joltrin provides durable B-Tree disk persistence, multi-account ACID transactions, and erasure coding.
+- **Kafka / RabbitMQ**: Industry standards for high-volume streaming and pub/sub. Choose Kafka when you need multi-datacenter event streams and log retention. Joltrin provides transactional task queues co-located with storage state for local swarms.
+- **Temporal**: Industry standard for long-running durable workflows spanning external microservices. Choose Temporal for multi-week human-in-the-loop workflows across disparate clouds. Joltrin is designed for local-to-cluster co-located data and task execution.
+- **SQLite**: Industry standard for embedded single-file relational databases. Choose SQLite for client desktop/mobile apps needing SQL. Joltrin is designed for high-concurrency multi-threaded workers, clustered coordination, partitioned vector stores, and erasure coding.
 
 ---
 
-## 🎯 When Zeltrin Is a Great Fit
+## 🎯 When Joltrin Is a Great Fit
 
 - **AI Agent Memory & Swarm Workforces**: Autonomous agents requiring durable conversation memory, vector similarity search, and task hand-offs without fragmented external databases. Checkpoints commit directly to B-Tree segments with atomic rollback if a worker crashes mid-reasoning.
 - **Real-Time Systems & Simulation State**: Game servers, robotics, and spatial computing needing sub-millisecond in-process transactional serialization (measured at 100k-145k ops/sec in local benchmarks) without database network hops.
@@ -356,7 +356,7 @@ Every architecture involves tradeoffs. Here is an honest comparison of where Zel
 
 ---
 
-## 🚫 When Zeltrin is NOT the Right Tool
+## 🚫 When Joltrin is NOT the Right Tool
 
 To be completely clear on architectural boundaries:
 
@@ -366,11 +366,11 @@ To be completely clear on architectural boundaries:
 
 ---
 
-## 🎮 See Zeltrin in Action (Zeltrin Arena Simulation)
+## 🎮 See Joltrin in Action (Joltrin Arena Simulation)
 
-In **[Zeltrin Arena](https://sharedcode.github.io/zeltrin/arena/)**, every control maps directly to a real distributed systems concept:
+In **[Joltrin Arena](https://sharedcode.github.io/joltrin/arena/)**, every control maps directly to a real distributed systems concept:
 
-| Simulation Control | Distributed Systems Concept | Zeltrin Technical Mechanism |
+| Simulation Control | Distributed Systems Concept | Joltrin Technical Mechanism |
 | :--- | :--- | :--- |
 | **Add Worker** | Swarm Compute | Dynamic queue rebalancing across peer worker nodes without central master bottlenecks. |
 | **Remove Worker** | Graceful Degradation | Active tasks drained and re-assigned to healthy nodes with zero dropped writes. |
@@ -381,9 +381,9 @@ In **[Zeltrin Arena](https://sharedcode.github.io/zeltrin/arena/)**, every contr
 
 ---
 
-## 👥 Who Zeltrin Is For
+## 👥 Who Joltrin Is For
 
-Zeltrin is one codebase, but different people will care about it for different reasons. Jump to the section that matches you:
+Joltrin is one codebase, but different people will care about it for different reasons. Jump to the section that matches you:
 
 [Investors](#-for-investors) · [Investment Banking & Tech Finance](#-for-investment-banking--technology-finance) · [Potential Customers](#-for-potential-customers) · [CTOs & Engineering Executives](#-for-ctos--engineering-executives) · [AI Infrastructure Teams](#-for-ai-infrastructure-teams) · [Platform, SRE & Cloud Engineers](#-for-platform-sre--cloud-engineers) · [Researchers & Distributed Systems Engineers](#-for-researchers--distributed-systems-engineers) · [Students & Learners](#-for-students--learners) · [Developers](#-for-developers) · [Engineering Leaders & Hiring Managers](#-for-engineering-leaders--hiring-managers)
 
@@ -391,10 +391,10 @@ Zeltrin is one codebase, but different people will care about it for different r
 
 **The problem.** Teams building stateful distributed applications, agent systems especially, routinely wire together a database, a cache, a message queue, a lock manager, and a workflow engine just to get durable state and coordinated work. Each boundary between those systems is a place where consistency breaks during a partial failure. That integration tax is paid by every team that builds this kind of system, repeatedly.
 
-**What Zeltrin uniquely combines.** A B-Tree storage engine, ACID transactions, and swarm task coordination live inside one embedded library instead of behind separate network services. That is an architectural bet, not a settled fact: it trades the maturity and ecosystem of specialized tools (Postgres, Kafka, Temporal) for fewer moving parts and a single consistency boundary. Whether that tradeoff wins in a given workload is something a team has to evaluate, which is exactly what the [comparison table](#️-zeltrin-vs-alternatives) below is for.
+**What Joltrin uniquely combines.** A B-Tree storage engine, ACID transactions, and swarm task coordination live inside one embedded library instead of behind separate network services. That is an architectural bet, not a settled fact: it trades the maturity and ecosystem of specialized tools (Postgres, Kafka, Temporal) for fewer moving parts and a single consistency boundary. Whether that tradeoff wins in a given workload is something a team has to evaluate, which is exactly what the [comparison table](#️-joltrin-vs-alternatives) below is for.
 
 **Investment Thesis**
-Zeltrin is an open-source bet that "data plus compute in one embedded engine" is a better default for a growing category of workloads (AI agents, edge devices, real-time systems) than assembling that stack from five separate products. If that thesis is right, the project that owns the reference implementation of that architecture has a shot at becoming the default choice for it, the way SQLite became the default embedded relational store. That is a multi-year distribution bet, not a proven outcome.
+Joltrin is an open-source bet that "data plus compute in one embedded engine" is a better default for a growing category of workloads (AI agents, edge devices, real-time systems) than assembling that stack from five separate products. If that thesis is right, the project that owns the reference implementation of that architecture has a shot at becoming the default choice for it, the way SQLite became the default embedded relational store. That is a multi-year distribution bet, not a proven outcome.
 
 **Why Now**
 - AI agent systems increasingly need durable memory, checkpointing, and multi-worker coordination, and today that is usually stitched together from a vector database, a cache, and a job queue.
@@ -404,63 +404,63 @@ Zeltrin is an open-source bet that "data plus compute in one embedded engine" is
 These are real, observable industry trends. No specific market-sizing figures are cited here because this repository has not commissioned or verified any (see Market Opportunity below).
 
 **Market Opportunity**
-Zeltrin overlaps several existing categories rather than creating one from nothing: embedded databases (SQLite, RocksDB), distributed coordination (Zookeeper, etcd, Temporal), vector databases (Pinecone, Weaviate, pgvector), and workflow/task systems (Celery, Ray). Plausible buyers are teams building AI agent infrastructure, edge and IoT platforms, real-time/simulation backends, and fintech ledgers with strict transactional invariants. No independently sourced TAM/SAM/SOM figures are presented here; a rigorous estimate would require external market research (for example, from Gartner or IDC) that this project has not commissioned.
+Joltrin overlaps several existing categories rather than creating one from nothing: embedded databases (SQLite, RocksDB), distributed coordination (Zookeeper, etcd, Temporal), vector databases (Pinecone, Weaviate, pgvector), and workflow/task systems (Celery, Ray). Plausible buyers are teams building AI agent infrastructure, edge and IoT platforms, real-time/simulation backends, and fintech ledgers with strict transactional invariants. No independently sourced TAM/SAM/SOM figures are presented here; a rigorous estimate would require external market research (for example, from Gartner or IDC) that this project has not commissioned.
 
 **Business Model Opportunities**
 The project is MIT-licensed with no commercial product today. Plausible paths that open-source infrastructure projects in this category have used, listed here as potential directions rather than current plans, are detailed in [Commercialization Opportunities](#-commercialization-opportunities) below.
 
 **What Has Been Proven**
 - A working Go engine with ACID transactions (WAL plus two-phase commit), a custom B-Tree, and Reed-Solomon erasure coding, each with passing automated tests (18 packages carry tests in the core Go module; run them with `go test ./...`, while the two WASM-only packages build under `GOOS=js GOARCH=wasm`, see [Performance Benchmarks](#-performance-benchmarks) below for the throughput numbers).
-- A real WebAssembly build of the engine running ACID transactions, vector search, and agent-memory checkpointing entirely in-browser with zero runtime network calls after initial page load ([live demo](https://sharedcode.github.io/zeltrin/)).
+- A real WebAssembly build of the engine running ACID transactions, vector search, and agent-memory checkpointing entirely in-browser with zero runtime network calls after initial page load ([live demo](https://sharedcode.github.io/joltrin/)).
 - Working language bindings for Go (native), Python (`sop4py`, published to PyPI), and C# (`Sop`, published to NuGet), plus Java and Rust bindings that exist in-repo with tests but are not yet published to their package registries.
 - CI that runs the race detector and `govulncheck` on every change, and a changelog showing multiple rounds of real dependency and CVE remediation.
 
 **What Has Not Yet Been Proven**
 - No production deployments or paying customers are documented anywhere in this repository.
 - No independent, third-party, or peer-reviewed benchmarks exist; the performance numbers below come from this project's own benchmark harness on a single workstation, not a controlled multi-system comparison.
-- Zeltrin Arena's cluster view is a UI simulation of the underlying concepts for demonstration purposes, not a live multi-node deployment; multi-node swarm clustering itself is real and tested (`examples/swarm_clustered`, `examples/swarm_standalone`), but has not been run at meaningful scale or under adversarial network conditions in public.
+- Joltrin Arena's cluster view is a UI simulation of the underlying concepts for demonstration purposes, not a live multi-node deployment; multi-node swarm clustering itself is real and tested (`examples/swarm_clustered`, `examples/swarm_standalone`), but has not been run at meaningful scale or under adversarial network conditions in public.
 - No formal third-party security audit has been performed.
 - No case studies, design partners, or committed customers exist yet.
 
 ### 🏦 For Investment Banking & Technology Finance
 
-**Technology category.** Zeltrin sits in the embedded data infrastructure layer: a storage and coordination engine that applications link against directly, similar in category placement to SQLite or RocksDB, but extended with distributed ACID transactions and task coordination that those two do not attempt.
+**Technology category.** Joltrin sits in the embedded data infrastructure layer: a storage and coordination engine that applications link against directly, similar in category placement to SQLite or RocksDB, but extended with distributed ACID transactions and task coordination that those two do not attempt.
 
-**Adjacent markets.** Embedded/operational databases, distributed coordination and workflow orchestration, vector search infrastructure, and AI agent infrastructure tooling. Each of those adjacent markets has established commercial players (see the [comparison table](#️-zeltrin-vs-alternatives)), which is useful context for sizing the competitive landscape Zeltrin would need to differentiate against.
+**Adjacent markets.** Embedded/operational databases, distributed coordination and workflow orchestration, vector search infrastructure, and AI agent infrastructure tooling. Each of those adjacent markets has established commercial players (see the [comparison table](#️-joltrin-vs-alternatives)), which is useful context for sizing the competitive landscape Joltrin would need to differentiate against.
 
 **Potential strategic relevance.** Potential strategic relevance could include: infrastructure vendors looking to add an embedded, agent-friendly storage layer to an existing platform; cloud providers evaluating lightweight alternatives to running separate managed database, cache, and queue services for edge or agent workloads; or AI infrastructure companies needing a durable state layer under an agent runtime. None of this reflects any actual approach, interest, or discussion from any party; it is offered as a way to reason about where the technology could fit strategically.
 
 **Open-source distribution.** The project is distributed under the MIT license with no dual-licensing or commercial tier today. That maximizes adoption friction reduction (any team can use it in production immediately) at the cost of no current monetization mechanism. See [Commercialization Opportunities](#-commercialization-opportunities) for plausible paths from here.
 
-**Competitive landscape.** Summarized in the [Zeltrin vs. Alternatives](#️-zeltrin-vs-alternatives) table further down. No competitor is presented as inferior; each is a mature, widely deployed system that Zeltrin would need to displace or complement for any given workload.
+**Competitive landscape.** Summarized in the [Joltrin vs. Alternatives](#️-joltrin-vs-alternatives) table further down. No competitor is presented as inferior; each is a mature, widely deployed system that Joltrin would need to displace or complement for any given workload.
 
 ### 🏢 For Potential Customers
 
-**Is Zeltrin Right For Me?** Start from the existing [When Zeltrin is a Great Fit](#-when-zeltrin-is-a-great-fit) and [When Zeltrin is NOT the Right Tool](#-when-zeltrin-is-not-the-right-tool) sections above, they are the concrete answer. As a quick filter:
+**Is Joltrin Right For Me?** Start from the existing [When Joltrin is a Great Fit](#-when-joltrin-is-a-great-fit) and [When Joltrin is NOT the Right Tool](#-when-joltrin-is-not-the-right-tool) sections above, they are the concrete answer. As a quick filter:
 
-- If you are currently running Redis plus Postgres plus a queue just to get durable state and coordinated background work for one application, and that application's data fits comfortably on the machines it runs on, Zeltrin is worth evaluating as a replacement for that stack.
-- If you already run Postgres or Kafka at scale for reasons unrelated to this problem (complex SQL, multi-datacenter event retention, an existing team's expertise), Zeltrin is more likely to complement than replace what you have.
-- If your workload is petabyte-scale analytics or requires synchronous multi-region consensus, Zeltrin is not the right tool today; see the section above for specifics.
+- If you are currently running Redis plus Postgres plus a queue just to get durable state and coordinated background work for one application, and that application's data fits comfortably on the machines it runs on, Joltrin is worth evaluating as a replacement for that stack.
+- If you already run Postgres or Kafka at scale for reasons unrelated to this problem (complex SQL, multi-datacenter event retention, an existing team's expertise), Joltrin is more likely to complement than replace what you have.
+- If your workload is petabyte-scale analytics or requires synchronous multi-region consensus, Joltrin is not the right tool today; see the section above for specifics.
 
-Zeltrin is a library you embed, not a managed service you sign up for. There is no hosted offering today; you run it yourself, in-process, in your own infrastructure.
+Joltrin is a library you embed, not a managed service you sign up for. There is no hosted offering today; you run it yourself, in-process, in your own infrastructure.
 
 ### 👔 For CTOs & Engineering Executives
 
-Every service you run that exists only to hold state or coordinate work (a cache, a queue, a lock manager) is a service your team has to patch, monitor, upgrade, and page on. Zeltrin's bet is that collapsing storage, transactions, and task coordination into one embedded library reduces that surface for the workloads it fits, at the cost of giving up the specialized tooling and operational maturity of dedicated systems your team may already know well.
+Every service you run that exists only to hold state or coordinate work (a cache, a queue, a lock manager) is a service your team has to patch, monitor, upgrade, and page on. Joltrin's bet is that collapsing storage, transactions, and task coordination into one embedded library reduces that surface for the workloads it fits, at the cost of giving up the specialized tooling and operational maturity of dedicated systems your team may already know well.
 
 Concretely, that means: fewer network hops in your hot path (sub-millisecond, in-process calls instead of 15 to 50ms across Redis, a queue, and Postgres), one dependency to patch and upgrade instead of several, and a transaction boundary that spans your data and your background work instead of stopping at the database. It also means your team takes on a less mature, less battle-tested piece of infrastructure than Postgres or Kafka, with a correspondingly smaller ecosystem, smaller hiring pool of people who already know it, and no enterprise support contract available today. Evaluate it the way you would any early infrastructure bet: pilot it on one bounded, non-critical workload before committing a core system to it.
 
 ### 🧠 For AI Infrastructure Teams
 
-**What Zeltrin already provides.** Durable, transactional checkpointing for agent reasoning state: each step an agent commits is a separate, durable B-Tree write, so a killed agent process loses nothing already committed, and a successor process can resume from the last checkpoint. This is not a diagram, it runs today in the [browser demo](https://sharedcode.github.io/zeltrin/) (the "AI Agent Memory" tab) and as a Go example (`go run ./examples/agent_memory`). Zeltrin also provides vector similarity search over embeddings stored in the same B-Tree as structured data (`ai/memory`, `ai/vector`), and a real swarm/worker package (`ai/swarm`) with job and result stores.
+**What Joltrin already provides.** Durable, transactional checkpointing for agent reasoning state: each step an agent commits is a separate, durable B-Tree write, so a killed agent process loses nothing already committed, and a successor process can resume from the last checkpoint. This is not a diagram, it runs today in the [browser demo](https://sharedcode.github.io/joltrin/) (the "AI Agent Memory" tab) and as a Go example (`go run ./examples/agent_memory`). Joltrin also provides vector similarity search over embeddings stored in the same B-Tree as structured data (`ai/memory`, `ai/vector`), and a real swarm/worker package (`ai/swarm`) with job and result stores.
 
-**What could be built on Zeltrin, but is not shipped today.** A production multi-agent orchestration framework, a hosted durable-memory-as-a-service for agent frameworks like LangGraph or AutoGen, and distributed MapReduce-style helpers across a live agent swarm are all described as design proposals in [`ai/SWARM_DESIGN.md`](ai/SWARM_DESIGN.md) (explicitly marked "Proposal / Vision" in that file) but are not implemented and tested the way the checkpointing and vector search primitives are. Treat anything not demonstrated in the linked demo or example as a direction, not a delivered feature.
+**What could be built on Joltrin, but is not shipped today.** A production multi-agent orchestration framework, a hosted durable-memory-as-a-service for agent frameworks like LangGraph or AutoGen, and distributed MapReduce-style helpers across a live agent swarm are all described as design proposals in [`ai/SWARM_DESIGN.md`](ai/SWARM_DESIGN.md) (explicitly marked "Proposal / Vision" in that file) but are not implemented and tested the way the checkpointing and vector search primitives are. Treat anything not demonstrated in the linked demo or example as a direction, not a delivered feature.
 
-**Protocol interoperability, actually implemented.** `tools/mcpserver` and `tools/a2aagent` expose Zeltrin runbooks to MCP and A2A clients respectively, both gated by a real safety-and-reachability barrier certificate (`ai/verify`) so a step can't execute out of order regardless of what a calling agent claims. Both protocols share one execution trace store, proven by a test that commits steps via one protocol and confirms the other sees them. See [MCP, A2A, and the Verification Engine](docs/MCP_A2A_AND_VERIFICATION_ENGINE.md) for the audit, the design, and an honest accounting of what this checker is and is not (it is not general-purpose LTL model checking).
+**Protocol interoperability, actually implemented.** `tools/mcpserver` and `tools/a2aagent` expose Joltrin runbooks to MCP and A2A clients respectively, both gated by a real safety-and-reachability barrier certificate (`ai/verify`) so a step can't execute out of order regardless of what a calling agent claims. Both protocols share one execution trace store, proven by a test that commits steps via one protocol and confirms the other sees them. See [MCP, A2A, and the Verification Engine](docs/MCP_A2A_AND_VERIFICATION_ENGINE.md) for the audit, the design, and an honest accounting of what this checker is and is not (it is not general-purpose LTL model checking).
 
 ### ⚙️ For Platform, SRE & Cloud Engineers
 
-Zeltrin Engine is a library, not a server: there is no separate database process to provision, patch, or fail over for the embedded case. The optional `tools/httpserver` Data Manager is a standalone service with its own `/metrics` endpoint (tested in `tools/httpserver/metrics_test.go`) if you do want a network-accessible console. Failure recovery is handled by Reed-Solomon erasure coding across storage shards (`fs/erasure`, 12 passing tests at the time of writing) rather than full N-way replication, which trades some recovery latency for lower disk overhead. A prebuilt quickstart container is published to `ghcr.io/sharedcode/zeltrin-quickstart`. Multi-node swarm clustering exists and is tested (`examples/swarm_clustered`, `examples/swarm_standalone`), but has not been documented or proven at production scale.
+Joltrin Engine is a library, not a server: there is no separate database process to provision, patch, or fail over for the embedded case. The optional `tools/httpserver` Data Manager is a standalone service with its own `/metrics` endpoint (tested in `tools/httpserver/metrics_test.go`) if you do want a network-accessible console. Failure recovery is handled by Reed-Solomon erasure coding across storage shards (`fs/erasure`, 12 passing tests at the time of writing) rather than full N-way replication, which trades some recovery latency for lower disk overhead. A prebuilt quickstart container is published to `ghcr.io/sharedcode/joltrin-quickstart`. Multi-node swarm clustering exists and is tested (`examples/swarm_clustered`, `examples/swarm_standalone`), but has not been documented or proven at production scale.
 
 ### 🧪 For Researchers & Distributed Systems Engineers
 
@@ -474,17 +474,17 @@ Reading this codebase is a reasonable way to see real (not textbook-simplified) 
 
 ## 📈 Commercialization Opportunities
 
-Zeltrin has no commercial product, pricing, or customers today. It is an MIT-licensed open-source project. The paths below are the plausible business models that open-source infrastructure projects in this category (databases, coordination systems, workflow engines) have historically built, listed here as potential future directions, not current plans or commitments:
+Joltrin has no commercial product, pricing, or customers today. It is an MIT-licensed open-source project. The paths below are the plausible business models that open-source infrastructure projects in this category (databases, coordination systems, workflow engines) have historically built, listed here as potential future directions, not current plans or commitments:
 
-- **Hosted or managed Zeltrin**: a cloud offering that runs and operates Zeltrin clusters so teams do not have to manage erasure-coded storage and swarm coordination themselves.
-- **Enterprise support and SLAs**: paid support contracts for teams running Zeltrin in production, similar to how Postgres and Kafka have commercial support ecosystems around free cores.
+- **Hosted or managed Joltrin**: a cloud offering that runs and operates Joltrin clusters so teams do not have to manage erasure-coded storage and swarm coordination themselves.
+- **Enterprise support and SLAs**: paid support contracts for teams running Joltrin in production, similar to how Postgres and Kafka have commercial support ecosystems around free cores.
 - **Security, compliance, and governance add-ons**: audit logging, RBAC policy management (there is already an in-repo RBAC prototype, `rbac.go`, `docs/RBAC_ENTITLEMENTS.md`), and compliance tooling for regulated industries.
 - **Observability and operations tooling**: dashboards and alerting built on top of the existing `/metrics` endpoint and event logs.
-- **AI infrastructure products**: a packaged "durable agent memory" service built on the checkpointing primitives described above, sold to teams building agent frameworks who do not want to run Zeltrin themselves.
-- **Marketplace listings**: prebuilt container images (a `ghcr.io/sharedcode/zeltrin-quickstart` image already exists) distributed through cloud marketplaces.
-- **Professional services**: architecture consulting for teams migrating a fragmented Redis/Kafka/Postgres stack onto Zeltrin.
+- **AI infrastructure products**: a packaged "durable agent memory" service built on the checkpointing primitives described above, sold to teams building agent frameworks who do not want to run Joltrin themselves.
+- **Marketplace listings**: prebuilt container images (a `ghcr.io/sharedcode/joltrin-quickstart` image already exists) distributed through cloud marketplaces.
+- **Professional services**: architecture consulting for teams migrating a fragmented Redis/Kafka/Postgres stack onto Joltrin.
 
-None of these exist today. They are documented here so a reader evaluating Zeltrin as a commercial or investment opportunity can see the plausible paths from open-source project to business, and judge for themselves how credible each one is.
+None of these exist today. They are documented here so a reader evaluating Joltrin as a commercial or investment opportunity can see the plausible paths from open-source project to business, and judge for themselves how credible each one is.
 
 For a longer, more speculative look at what a local-first, enterprise-defensible version of this could become, including a candid list of what would have to be built first, see [Strategic Architecture & Investor Moat](docs/STRATEGIC_ARCHITECTURE_AND_MOAT.md). It is explicit throughout about the line between what exists in this repo today and what is proposed.
 
@@ -518,7 +518,7 @@ Standing up this matrix also surfaced a genuine, pre-existing Windows-only failu
 
 ```bash
 # Clone the repository and run the quickstart
-git clone https://github.com/sharedcode/zeltrin.git
+git clone https://github.com/sharedcode/joltrin.git
 cd sop
 go run ./examples/quickstart
 ```
@@ -528,7 +528,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/sharedcode/zeltrin/inmemory"
+	"github.com/sharedcode/joltrin/inmemory"
 )
 
 func main() {
@@ -562,7 +562,7 @@ This demo demonstrates an AI worker creating a context checkpoint, crashing mid-
 
 Below are benchmark results from the repository benchmark harness (`tools/benchmark`) run on a 2015 MacBook Pro (Dual-Core Intel Core i5, 8GB RAM, macOS).
 
-What is measured: these runs benchmark Zeltrin Engine's in-memory L2 cache with `/tmp` storage backing full ACID transactions, not disk-only storage without cache.
+What is measured: these runs benchmark Joltrin Engine's in-memory L2 cache with `/tmp` storage backing full ACID transactions, not disk-only storage without cache.
 
 ### Microsecond-Scale Latency Profile
 
@@ -615,7 +615,7 @@ For technical leaders, CTOs, and hiring managers, this repository serves as a wo
 - **Polyglot Architecture**: Native Go kernel, Python bindings (`sop4py`), C# bindings (`Sop`), and browser WebAssembly.
 - **Production Delivery**: GitHub Actions CI/CD matrix, distroless container builds on GHCR, Codecov integration, and static GitHub Pages deployments.
 
-If you are building distributed systems, cloud infrastructure, or AI data platforms and want to discuss architecture, feel free to connect via [GitHub Discussions](https://github.com/SharedCode/zeltrin/discussions).
+If you are building distributed systems, cloud infrastructure, or AI data platforms and want to discuss architecture, feel free to connect via [GitHub Discussions](https://github.com/SharedCode/joltrin/discussions).
 
 ---
 
@@ -623,7 +623,7 @@ If you are building distributed systems, cloud infrastructure, or AI data platfo
 
 | Language | Installation | Description |
 | :--- | :--- | :--- |
-| **Go** | `go get github.com/sharedcode/zeltrin` | Native high-performance core engine. |
+| **Go** | `go get github.com/sharedcode/joltrin` | Native high-performance core engine. |
 | **Python** | `pip install sop4py` | Python bindings with Data Manager and AI scripts. |
 | **C#** | `dotnet add package Sop` | Complete .NET Core integration. |
 | **WebAssembly** | `GOOS=js GOARCH=wasm go build` | Browser-sandboxed zero-server execution. |
@@ -631,20 +631,20 @@ If you are building distributed systems, cloud infrastructure, or AI data platfo
 | **Java** *(in progress)* | source in `bindings/java`, not yet on Maven Central | `sop4j` bindings and tests are complete; publishing is blocked on Central Portal credential setup, tracked in [`docs/RELEASE_PROCESS_JAVA_STATUS.md`](docs/RELEASE_PROCESS_JAVA_STATUS.md). |
 | **Rust** *(in progress)* | source in `bindings/rust`, not yet on crates.io | `sop4rs` bindings, tests, and examples exist in-repo but are not yet published as a crate. |
 
-### How to Consume Zeltrin: Releases vs. In-Repo Source
+### How to Consume Joltrin: Releases vs. In-Repo Source
 
-When integrating Zeltrin into your stack, choose between official versioned releases and in-repo source consumption based on your development and operational needs:
+When integrating Joltrin into your stack, choose between official versioned releases and in-repo source consumption based on your development and operational needs:
 
 | Dimension | Official Tagged Releases (Recommended for Production) | In-Repo Source / Submodule (Active Prototyping & Contribution) |
 | :--- | :--- | :--- |
-| **Artifacts** | `go get github.com/sharedcode/zeltrin@vX.Y.Z`<br>PyPI: `pip install sop4py`<br>NuGet: `dotnet add package Sop` | Git clone or submodule linked directly to `HEAD` or a feature branch |
+| **Artifacts** | `go get github.com/sharedcode/joltrin@vX.Y.Z`<br>PyPI: `pip install sop4py`<br>NuGet: `dotnet add package Sop` | Git clone or submodule linked directly to `HEAD` or a feature branch |
 | **Best For** | Production services, reproducible CI/CD builds, audited dependencies | Modifying engine internals, local benchmarking, custom protocol servers |
 | **Stability** | Semantic versioning, tagged releases, audited dependency graph | Bleeding-edge features, experimental branches, unreleased protocol bridges |
 | **Maintenance** | Handled by standard language package managers | Requires manual git fetch/rebase and local workspace management |
 
 #### 1. Official Tagged Releases (Recommended for Production)
 For production deployments, pin your dependency to a tagged release. This guarantees reproducible builds, backward-compatible API guarantees, and security-scanned transitive dependencies:
-- **Go**: `go get github.com/sharedcode/zeltrin@v0.1.0`
+- **Go**: `go get github.com/sharedcode/joltrin@v0.1.0`
 - **Python**: `pip install sop4py==0.1.0`
 - **C# / .NET**: `dotnet add package Sop --version 0.1.0`
 
@@ -652,7 +652,7 @@ For production deployments, pin your dependency to a tagged release. This guaran
 If you are extending storage engine internals (`btree/`, `fs/`), modifying protocol servers (`ai/verify`, `cmd/sop-mcp-server`, `cmd/sop-a2a-agent`), or benchmarking performance enhancements, consuming from source is recommended:
 ```bash
 # Add as a git submodule in your project
-git submodule add https://github.com/sharedcode/zeltrin.git vendor/sop
+git submodule add https://github.com/sharedcode/joltrin.git vendor/sop
 
 # Or configure a Go workspace (go.work) for local development
 go work use ./vendor/sop
@@ -673,9 +673,9 @@ go work use ./vendor/sop
 
 We welcome feedback, issues, and contributions:
 
-1. **Fork & Clone**: `git clone https://github.com/sharedcode/zeltrin.git`
+1. **Fork & Clone**: `git clone https://github.com/sharedcode/joltrin.git`
 2. **Run Tests**: `go test -v ./...`
-3. **Join Discussions**: [GitHub Discussions](https://github.com/SharedCode/zeltrin/discussions)
+3. **Join Discussions**: [GitHub Discussions](https://github.com/SharedCode/joltrin/discussions)
 4. **Submit a PR**: Follow Go formatting standards (`gofmt`) and include test coverage.
 
 ---

@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/joltrin/ai"
 )
 
 // gemini implements the Generator interface for Google's Gemini models.

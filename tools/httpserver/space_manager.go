@@ -14,10 +14,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/ai"
-	"github.com/sharedcode/zeltrin/ai/database"
-	"github.com/sharedcode/zeltrin/ai/memory"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/ai"
+	"github.com/sharedcode/joltrin/ai/database"
+	"github.com/sharedcode/joltrin/ai/memory"
 )
 
 func autoVectorizeBuiltinSpace(ctx context.Context, db *database.Database, spaceName, preloadPath string, emb ai.Embeddings, llm ai.Generator, onProgress func(progress int, total int, msg string)) error {

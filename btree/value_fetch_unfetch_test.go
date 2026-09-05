@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/joltrin"
 )
 
 // This test exercises GetCurrentValue path where ValueNeedsFetch flips and valueWasFetched gets set.

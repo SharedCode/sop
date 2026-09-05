@@ -1,4 +1,4 @@
-module github.com/sharedcode/zeltrin/incfs
+module github.com/sharedcode/joltrin/incfs
 
 go 1.26.8
 

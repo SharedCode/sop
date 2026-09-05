@@ -6,14 +6,14 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/ai"
-	"github.com/sharedcode/zeltrin/ai/database"
-	"github.com/sharedcode/zeltrin/btree"
-	"github.com/sharedcode/zeltrin/common"
-	sopdb "github.com/sharedcode/zeltrin/database"
-	"github.com/sharedcode/zeltrin/encoding"
-	"github.com/sharedcode/zeltrin/jsondb"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/ai"
+	"github.com/sharedcode/joltrin/ai/database"
+	"github.com/sharedcode/joltrin/btree"
+	"github.com/sharedcode/joltrin/common"
+	sopdb "github.com/sharedcode/joltrin/database"
+	"github.com/sharedcode/joltrin/encoding"
+	"github.com/sharedcode/joltrin/jsondb"
 )
 
 func (a *CopilotAgent) resolveTransaction(ctx context.Context, db *database.Database, dbName string, mode sop.TransactionMode) (sop.Transaction, bool, error) {

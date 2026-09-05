@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/ai"
-	"github.com/sharedcode/zeltrin/btree"
-	"github.com/sharedcode/zeltrin/infs"
-	"github.com/sharedcode/zeltrin/jsondb"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/ai"
+	"github.com/sharedcode/joltrin/btree"
+	"github.com/sharedcode/joltrin/infs"
+	"github.com/sharedcode/joltrin/jsondb"
 )
 
 // btreeModelStore implements ModelStore using SOP B-Trees.

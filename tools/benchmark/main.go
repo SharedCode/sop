@@ -7,9 +7,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/cache"
-	"github.com/sharedcode/zeltrin/infs"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/cache"
+	"github.com/sharedcode/joltrin/infs"
 )
 
 func main() {
@@ -23,7 +23,7 @@ func main() {
 		return cache.NewL2InMemoryCache()
 	})
 
-	fmt.Printf("Benchmarking Zeltrin with %d items in %s\n", *count, *path)
+	fmt.Printf("Benchmarking Joltrin with %d items in %s\n", *count, *path)
 
 	// Ensure path exists
 	if err := os.MkdirAll(*path, 0755); err != nil {

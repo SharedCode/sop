@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/btree"
-	"github.com/sharedcode/zeltrin/infs"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/btree"
+	"github.com/sharedcode/joltrin/infs"
 )
 
 // Store manages the persistence of Jobs and Results in the swarm.

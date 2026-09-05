@@ -1,24 +1,24 @@
-module github.com/sharedcode/zeltrin/ai
+module github.com/sharedcode/joltrin/ai
 
 go 1.26.8
 
-replace github.com/sharedcode/zeltrin => ../
+replace github.com/sharedcode/joltrin => ../
 
-replace github.com/sharedcode/zeltrin/infs => ../infs
+replace github.com/sharedcode/joltrin/infs => ../infs
 
-replace github.com/sharedcode/zeltrin/jsondb => ../jsondb
+replace github.com/sharedcode/joltrin/jsondb => ../jsondb
 
-replace github.com/sharedcode/zeltrin/search => ../search
+replace github.com/sharedcode/joltrin/search => ../search
 
 require (
 	github.com/google/cel-go v0.29.0
 	github.com/google/uuid v1.6.0
 	github.com/kelindar/search v0.4.1
 	github.com/sethvargo/go-retry v0.3.0
-	github.com/sharedcode/zeltrin v0.0.0
-	github.com/sharedcode/zeltrin/infs v0.0.0
-	github.com/sharedcode/zeltrin/jsondb v0.0.0
-	github.com/sharedcode/zeltrin/search v0.0.0
+	github.com/sharedcode/joltrin v0.0.0
+	github.com/sharedcode/joltrin/infs v0.0.0
+	github.com/sharedcode/joltrin/jsondb v0.0.0
+	github.com/sharedcode/joltrin/search v0.0.0
 	github.com/stretchr/testify v1.11.1
 	github.com/yuin/goldmark v1.8.2
 	golang.org/x/sync v0.21.0

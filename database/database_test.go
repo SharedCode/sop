@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/database"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/database"
 )
 
 func TestDatabase_Standalone_Simple(t *testing.T) {

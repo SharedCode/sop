@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/joltrin"
 )
 
 // Test GetCurrentValueNoLock returns value without calling NodeRepository.Fetched

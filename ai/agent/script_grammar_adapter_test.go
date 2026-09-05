@@ -3,7 +3,7 @@ package agent
 import (
 	"testing"
 
-	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/joltrin/ai"
 )
 
 func TestValidateScriptGrammarFromSteps_UsesSanitizeBeforeGrammar(t *testing.T) {

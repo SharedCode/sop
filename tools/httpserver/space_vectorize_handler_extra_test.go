@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/joltrin"
 )
 
 func TestHandleVectorizeSpace_BeginTransactionFail(t *testing.T) {

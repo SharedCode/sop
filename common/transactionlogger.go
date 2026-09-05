@@ -6,9 +6,9 @@ import (
 	log "log/slog"
 	"time"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/encoding"
-	"github.com/sharedcode/zeltrin/inmemory"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/encoding"
+	"github.com/sharedcode/joltrin/inmemory"
 )
 
 type commitFunction int

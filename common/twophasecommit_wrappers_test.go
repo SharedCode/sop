@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/cache"
-	"github.com/sharedcode/zeltrin/common/mocks"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/cache"
+	"github.com/sharedcode/joltrin/common/mocks"
 )
 
 // closerRegistry embeds the mock registry and adds Close for exercising Transaction.Close.

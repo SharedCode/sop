@@ -5,11 +5,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/ai"
-	"github.com/sharedcode/zeltrin/ai/database"
-	sopdb "github.com/sharedcode/zeltrin/database"
-	"github.com/sharedcode/zeltrin/jsondb"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/ai"
+	"github.com/sharedcode/joltrin/ai/database"
+	sopdb "github.com/sharedcode/joltrin/database"
+	"github.com/sharedcode/joltrin/jsondb"
 )
 
 type johnOrdersOver500Generator struct{ calls int }

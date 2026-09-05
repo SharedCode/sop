@@ -23,7 +23,7 @@ export const MissionSuccessModal: React.FC<MissionSuccessModalProps> = ({
   if (!isOpen) return null;
 
   const handleCopyShare = () => {
-    const text = `I just survived the Zeltrin Distributed Systems Disaster with a ${metrics.reliabilityScore.toFixed(1)}% reliability score and 0 dropped writes! Try it: https://sharedcode.github.io/zeltrin/arena/`;
+    const text = `I just survived the Joltrin Distributed Systems Disaster with a ${metrics.reliabilityScore.toFixed(1)}% reliability score and 0 dropped writes! Try it: https://sharedcode.github.io/joltrin/arena/`;
     navigator.clipboard.writeText(text).then(() => {
       alert('Challenge link copied to clipboard!');
     });
@@ -63,7 +63,7 @@ export const MissionSuccessModal: React.FC<MissionSuccessModalProps> = ({
           </div>
           <div className="text-brand-400 font-bold text-sm">
             ↓ <br />
-            Zeltrin (formerly SOP)
+            Joltrin (formerly SOP)
           </div>
         </div>
 
@@ -86,13 +86,13 @@ export const MissionSuccessModal: React.FC<MissionSuccessModalProps> = ({
         {/* Call to Actions */}
         <div className="flex flex-col sm:flex-row gap-3 pt-2">
           <a
-            href="https://github.com/sharedcode/zeltrin"
+            href="https://github.com/sharedcode/joltrin"
             target="_blank"
             rel="noopener noreferrer"
             className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 font-bold text-xs text-black shadow-lg shadow-brand-500/20 flex items-center justify-center space-x-2 transition"
           >
             <GithubIcon className="w-4 h-4 text-black" />
-            <span>EXPLORE ZELTRIN ON GITHUB</span>
+            <span>EXPLORE JOLTRIN ON GITHUB</span>
           </a>
 
           <button

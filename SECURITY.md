@@ -8,7 +8,7 @@ Security fixes are applied to the latest released version of the core Go module 
 
 Please do not open a public GitHub issue for security vulnerabilities.
 
-Instead, report it privately using [GitHub Security Advisories](https://github.com/SharedCode/zeltrin/security/advisories/new) for this repository. If that is not available to you, open a [GitHub Discussion](https://github.com/SharedCode/zeltrin/discussions) marked private or contact a maintainer directly.
+Instead, report it privately using [GitHub Security Advisories](https://github.com/SharedCode/joltrin/security/advisories/new) for this repository. If that is not available to you, open a [GitHub Discussion](https://github.com/SharedCode/joltrin/discussions) marked private or contact a maintainer directly.
 
 When reporting, please include:
 

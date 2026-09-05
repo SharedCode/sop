@@ -9,7 +9,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/joltrin/ai"
 )
 
 func main() {

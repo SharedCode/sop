@@ -3,8 +3,8 @@ package common
 import (
 	"context"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/btree"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/btree"
 )
 
 // Frontend facing Node Repository. Implements the NodeRepository interface CRUD methods.

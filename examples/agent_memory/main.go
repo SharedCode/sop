@@ -19,7 +19,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/sharedcode/zeltrin/inmemory"
+	"github.com/sharedcode/joltrin/inmemory"
 )
 
 // AgentMemoryFrame represents a single reasoning checkpoint for an AI agent.
@@ -45,7 +45,7 @@ type SwarmTask struct {
 
 func main() {
 	fmt.Println("================================================================")
-	fmt.Println("  ZELTRIN AGENT MEMORY ENGINE // AI SWARM STATE PERSISTENCE DEMO")
+	fmt.Println("  JOLTRIN AGENT MEMORY ENGINE // AI SWARM STATE PERSISTENCE DEMO")
 	fmt.Println("================================================================")
 	fmt.Println("Demonstrating atomic memory checkpointing, vector recall, and failover.")
 	fmt.Println()
@@ -89,11 +89,11 @@ func main() {
 	fmt.Println("\n[3] Simulating unexpected Agent Worker 01 process crash mid-reasoning...")
 	failedFrameKey := fmt.Sprintf("mem:%s:step:02", initialTask.AssignedTo)
 	fmt.Printf("    -> Worker 01 terminated abruptly holding uncommitted context '%s'\n", failedFrameKey)
-	fmt.Println("    -> [Zeltrin Isolation] Incomplete transaction frame rolled back automatically.")
+	fmt.Println("    -> [Joltrin Isolation] Incomplete transaction frame rolled back automatically.")
 	fmt.Println("    -> Zero corrupted memory frames persisted to B-Tree.")
 
 	// Step 4: Swarm Failover & Re-assignment
-	fmt.Println("\n[4] Zeltrin Swarm Coordinator detects heartbeat lease timeout (12ms)...")
+	fmt.Println("\n[4] Joltrin Swarm Coordinator detects heartbeat lease timeout (12ms)...")
 	initialTask.AssignedTo = "agent-worker-02"
 	initialTask.Status = "RUNNING"
 	updatedTaskBytes, _ := json.Marshal(initialTask)

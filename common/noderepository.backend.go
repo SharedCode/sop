@@ -5,10 +5,10 @@ import (
 	"fmt"
 	log "log/slog"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/btree"
-	"github.com/sharedcode/zeltrin/cache"
-	"github.com/sharedcode/zeltrin/encoding"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/btree"
+	"github.com/sharedcode/joltrin/cache"
+	"github.com/sharedcode/joltrin/encoding"
 )
 
 // Backend facing Node Repository. Part of where the magic happens.

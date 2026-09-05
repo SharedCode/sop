@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/database"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/database"
 )
 
 func TestValidateAdminToken_UsesAdminRoleContext(t *testing.T) {

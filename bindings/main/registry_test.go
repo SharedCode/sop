@@ -4,7 +4,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/joltrin"
 )
 
 func TestRegistry_Add_Get(t *testing.T) {

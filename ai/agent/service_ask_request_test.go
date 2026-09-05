@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/joltrin/ai"
 )
 
 // TestAskWithRequest_BasicFlow tests the new explicit parameter API

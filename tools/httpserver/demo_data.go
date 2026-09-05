@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/database"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/database"
 )
 
 // Demo Data Structures

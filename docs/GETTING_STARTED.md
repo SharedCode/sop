@@ -9,7 +9,7 @@ Welcome to **Scalable Objects Persistence (SOP)**! This guide will take you from
 
 **Note for Go Developers:** You do not need to download this bundle. SOP is a native Go library. You can simply `go get` the package (see [Developing with SOP](#3-developing-with-sop) below) and compile your application.
 
-Go to the [Releases Page](https://github.com/SharedCode/zeltrin/releases) and download the **Platform Bundle** for your operating system:
+Go to the [Releases Page](https://github.com/SharedCode/joltrin/releases) and download the **Platform Bundle** for your operating system:
 
 *   **macOS (Apple Silicon)**: `sop-bundle-macos-arm64.zip`
 *   **macOS (Intel)**: `sop-bundle-macos-amd64.zip`
@@ -78,14 +78,14 @@ Now that your server is running, you can write code to interact with it. SOP is 
 ### Go (Native)
 1.  **Install**:
     ```bash
-    go get github.com/sharedcode/zeltrin
+    go get github.com/sharedcode/joltrin
     ```
 2.  **Code**:
     ```go
     import (
         "context"
-        "github.com/sharedcode/zeltrin"
-        "github.com/sharedcode/zeltrin/database"
+        "github.com/sharedcode/joltrin"
+        "github.com/sharedcode/joltrin/database"
     )
 
     // Open Database (Standalone)

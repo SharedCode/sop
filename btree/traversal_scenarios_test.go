@@ -6,7 +6,7 @@ package btree
 import (
 	"testing"
 
-	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/joltrin"
 )
 
 // (from traversal_test.go)

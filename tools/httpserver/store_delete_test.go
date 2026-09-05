@@ -8,8 +8,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/database"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/database"
 )
 
 func TestHandleAddStore_PreservesMapValueSchemaWithoutSeedKey(t *testing.T) {

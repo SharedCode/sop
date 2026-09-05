@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/joltrin"
 )
 
 // NOTE: Original distribute_* test files have been removed. This file intentionally contains

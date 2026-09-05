@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/common/mocks"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/common/mocks"
 )
 
 // TestRegistry_AllScenarios consolidates registry & registryMap behaviors into one table-driven suite.

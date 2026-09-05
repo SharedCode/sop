@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/joltrin"
 )
 
 // removeItemOnNodeWithNilChild handles deletions where one of the children around

@@ -8,7 +8,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/sharedcode/zeltrin/incfs"
+	"github.com/sharedcode/joltrin/incfs"
 )
 
 // Gate these tests behind an explicit opt-in and ready environment.

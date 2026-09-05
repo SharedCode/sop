@@ -6,12 +6,12 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/sharedcode/zeltrin"
-	cas "github.com/sharedcode/zeltrin/adapters/cassandra"
-	"github.com/sharedcode/zeltrin/btree"
-	"github.com/sharedcode/zeltrin/fs"
-	"github.com/sharedcode/zeltrin/internal/inredck"
-	sd "github.com/sharedcode/zeltrin/streamingdata"
+	"github.com/sharedcode/joltrin"
+	cas "github.com/sharedcode/joltrin/adapters/cassandra"
+	"github.com/sharedcode/joltrin/btree"
+	"github.com/sharedcode/joltrin/fs"
+	"github.com/sharedcode/joltrin/internal/inredck"
+	sd "github.com/sharedcode/joltrin/streamingdata"
 )
 
 // NewBtree creates a new B-Tree instance with data persisted to backend storage upon commit.

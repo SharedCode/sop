@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/sharedcode/zeltrin/ai/etl"
+	"github.com/sharedcode/joltrin/ai/etl"
 )
 
 func main() {

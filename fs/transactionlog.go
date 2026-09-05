@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/encoding"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/encoding"
 )
 
 const (

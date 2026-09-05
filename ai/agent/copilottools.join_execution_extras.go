@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sharedcode/zeltrin/jsondb"
+	"github.com/sharedcode/joltrin/jsondb"
 )
 
 func (jc *JoinRightCursor) GetIndexSpecs() map[string]*jsondb.IndexSpecification {

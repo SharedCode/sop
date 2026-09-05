@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/ai"
-	"github.com/sharedcode/zeltrin/ai/memory"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/ai"
+	"github.com/sharedcode/joltrin/ai/memory"
 )
 
 // BulkUpsertCategories upserts multiple categories (first-class bulk API)

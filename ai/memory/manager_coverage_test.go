@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/btree"
-	"github.com/sharedcode/zeltrin/inmemory"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/btree"
+	"github.com/sharedcode/joltrin/inmemory"
 )
 
 // Test edge cases to hit 100% coverage

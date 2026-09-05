@@ -252,9 +252,9 @@ package main
 import (
     "context"
     "fmt"
-    "github.com/sharedcode/zeltrin/ai"
-    "github.com/sharedcode/zeltrin/database"
-    "github.com/sharedcode/zeltrin/ai/embed"
+    "github.com/sharedcode/joltrin/ai"
+    "github.com/sharedcode/joltrin/database"
+    "github.com/sharedcode/joltrin/ai/embed"
 )
 
 func main() {

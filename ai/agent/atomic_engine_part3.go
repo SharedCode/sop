@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/ai"
-	"github.com/sharedcode/zeltrin/jsondb"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/ai"
+	"github.com/sharedcode/joltrin/jsondb"
 )
 
 func normalizeScriptStepForCompatibility(step map[string]any) {

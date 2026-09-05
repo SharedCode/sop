@@ -8,9 +8,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/btree"
-	core_database "github.com/sharedcode/zeltrin/database"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/btree"
+	core_database "github.com/sharedcode/joltrin/database"
 )
 
 // ensurePlan selects the execution strategy using simple schema analysis.

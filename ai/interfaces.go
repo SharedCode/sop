@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/btree"
-	"github.com/sharedcode/zeltrin/search"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/btree"
+	"github.com/sharedcode/joltrin/search"
 )
 
 // ContextKey is a type for context keys used in the AI package.

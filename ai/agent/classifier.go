@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/sharedcode/zeltrin/ai"
-	"github.com/sharedcode/zeltrin/ai/database"
+	"github.com/sharedcode/joltrin/ai"
+	"github.com/sharedcode/joltrin/ai/database"
 )
 
 type LayerInfo struct {

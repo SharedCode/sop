@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/sharedcode/zeltrin/jsondb"
+	"github.com/sharedcode/joltrin/jsondb"
 )
 
 func TestReproJoinResult(t *testing.T) {

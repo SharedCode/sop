@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/joltrin"
 )
 
 type Mock_vid_registry struct {

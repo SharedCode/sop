@@ -11,9 +11,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/sharedcode/zeltrin/ai"
-	"github.com/sharedcode/zeltrin/ai/agent/parser"
-	"github.com/sharedcode/zeltrin/ai/obfuscation"
+	"github.com/sharedcode/joltrin/ai"
+	"github.com/sharedcode/joltrin/ai/agent/parser"
+	"github.com/sharedcode/joltrin/ai/obfuscation"
 )
 
 // NativeReActEngine implements ReasoningEngine using native LLM API tool calling.

@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/btree"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/btree"
 )
 
 func Test_Transaction_Aggregators_InvokeClosures(t *testing.T) {

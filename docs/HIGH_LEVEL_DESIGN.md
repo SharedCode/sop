@@ -142,14 +142,14 @@ CI runs on GitHub Actions. For this repo it beats Jenkins on every axis that mat
 Container, two commands:
 
 ```bash
-docker pull ghcr.io/sharedcode/zeltrin-quickstart:stable
-docker run --rm ghcr.io/sharedcode/zeltrin-quickstart:stable
+docker pull ghcr.io/sharedcode/joltrin-quickstart:stable
+docker run --rm ghcr.io/sharedcode/joltrin-quickstart:stable
 ```
 
 Full server from a release bundle, three commands:
 
 ```bash
-curl -LO https://github.com/SharedCode/zeltrin/releases/latest/download/sop-bundle-linux-amd64.tar.gz
+curl -LO https://github.com/SharedCode/joltrin/releases/latest/download/sop-bundle-linux-amd64.tar.gz
 tar xzf sop-bundle-linux-amd64.tar.gz
 ./sop-bundle/sop-httpserver
 ```

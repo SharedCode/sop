@@ -6,10 +6,10 @@ import (
 	"os"
 	"testing"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/ai"
-	"github.com/sharedcode/zeltrin/cache"
-	"github.com/sharedcode/zeltrin/infs"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/ai"
+	"github.com/sharedcode/joltrin/cache"
+	"github.com/sharedcode/joltrin/infs"
 )
 
 // TestPartialOptimizationState verifies that the system behaves correctly

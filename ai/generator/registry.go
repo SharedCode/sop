@@ -3,7 +3,7 @@ package generator
 import (
 	"fmt"
 
-	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/joltrin/ai"
 )
 
 type Factory func(cfg map[string]any) (ai.Generator, error)

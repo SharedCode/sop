@@ -14,10 +14,10 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/database"
-	"github.com/sharedcode/zeltrin/fs"
-	"github.com/sharedcode/zeltrin/tools/confighub"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/database"
+	"github.com/sharedcode/joltrin/fs"
+	"github.com/sharedcode/joltrin/tools/confighub"
 )
 
 // handleListEnvironments returns a list of JSON config files in the current directory.

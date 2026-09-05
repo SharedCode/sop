@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/joltrin"
 )
 
 func TestFindWithID_Table(t *testing.T) {

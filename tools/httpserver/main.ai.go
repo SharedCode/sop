@@ -16,17 +16,17 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/ai"
-	"github.com/sharedcode/zeltrin/ai/agent"
-	aidb "github.com/sharedcode/zeltrin/ai/database"
-	"github.com/sharedcode/zeltrin/ai/embed"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/ai"
+	"github.com/sharedcode/joltrin/ai/agent"
+	aidb "github.com/sharedcode/joltrin/ai/database"
+	"github.com/sharedcode/joltrin/ai/embed"
 
-	_ "github.com/sharedcode/zeltrin/ai/generator"
-	"github.com/sharedcode/zeltrin/ai/memory"
-	"github.com/sharedcode/zeltrin/ai/obfuscation"
-	"github.com/sharedcode/zeltrin/btree"
-	"github.com/sharedcode/zeltrin/database"
+	_ "github.com/sharedcode/joltrin/ai/generator"
+	"github.com/sharedcode/joltrin/ai/memory"
+	"github.com/sharedcode/joltrin/ai/obfuscation"
+	"github.com/sharedcode/joltrin/btree"
+	"github.com/sharedcode/joltrin/database"
 )
 
 // ObfuscationMode defines the global obfuscation policy.

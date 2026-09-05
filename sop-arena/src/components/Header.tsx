@@ -66,7 +66,7 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
           <div className="flex-shrink-0">
             <div className="flex items-center space-x-2">
-              <span className="font-extrabold tracking-tight text-white text-base sm:text-lg whitespace-nowrap leading-none">ZELTRIN ARENA</span>
+              <span className="font-extrabold tracking-tight text-white text-base sm:text-lg whitespace-nowrap leading-none">JOLTRIN ARENA</span>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-brand-500/10 border border-brand-500/30 text-brand-400 font-mono font-semibold uppercase whitespace-nowrap hidden sm:inline-block">
                 Interactive Sim
               </span>
@@ -82,7 +82,7 @@ export const Header: React.FC<HeaderProps> = ({
           <a
             href="../"
             className="px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1 text-slate-400 hover:text-white transition"
-            title="Switch to Zeltrin Technical Demo"
+            title="Switch to Joltrin Technical Demo"
           >
             <span>🧠 Tech Demo</span>
           </a>
@@ -122,7 +122,7 @@ export const Header: React.FC<HeaderProps> = ({
           <a
             href="../agents/"
             className="px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1 text-slate-400 hover:text-white transition"
-            title="Switch to Zeltrin Agent Verification Barrier"
+            title="Switch to Joltrin Agent Verification Barrier"
           >
             <span>🔌 Barrier</span>
           </a>
@@ -143,7 +143,7 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             onClick={onOpenCopilot}
             className="px-3 py-1.5 rounded-lg bg-dark-900 hover:bg-dark-850 text-accent-cyan border border-accent-cyan/30 text-xs font-semibold flex items-center space-x-1.5 shadow-sm transition"
-            title="Ask Zeltrin Copilot"
+            title="Ask Joltrin Copilot"
           >
             <Sparkles className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Copilot</span>
@@ -169,7 +169,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* GitHub Repo Link */}
           <a
-            href="https://github.com/sharedcode/zeltrin"
+            href="https://github.com/sharedcode/joltrin"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-brand-500 hover:bg-brand-400 text-black font-semibold text-xs transition shadow-md shadow-brand-500/20"

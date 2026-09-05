@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/joltrin/ai"
 )
 
 // PolicyAgent is a specialized agent that enforces policies.

@@ -65,7 +65,7 @@ def create_base_canvas():
     draw.line([(zx+1, zy+16), (zx+19, zy+16)], fill=BRAND_VIOLET, width=2)
     
     # Header tag
-    draw.text((80, 16), "SHAREDCODE ZELTRIN // IN-PROCESS STATE ENGINE", fill=TEXT_MUTED, font=font_mono)
+    draw.text((80, 16), "SHAREDCODE JOLTRIN // IN-PROCESS STATE ENGINE", fill=TEXT_MUTED, font=font_mono)
     return img, draw
 
 frames = []
@@ -76,7 +76,7 @@ for i in range(12):
     
     # Title badge
     draw.rounded_rectangle([(60, 68), (275, 95)], radius=8, fill=(12, 32, 36), outline=BRAND_CYAN, width=1)
-    draw.text((74, 74), "// ZELTRIN ARCHITECTURE", fill=BRAND_CYAN, font=font_mono)
+    draw.text((74, 74), "// JOLTRIN ARCHITECTURE", fill=BRAND_CYAN, font=font_mono)
     
     # Main Headline
     draw.text((60, 110), "One engine for data, memory, and compute.", fill=TEXT_WHITE, font=font_title)
@@ -95,8 +95,8 @@ for i in range(12):
         draw.text((cx + 16, 238), desc, fill=TEXT_MUTED, font=font_small)
         
     # Footer comparison
-    draw.text((60, 325), "WITHOUT ZELTRIN: App -> DB + Queue + Locks + Retries + Failover (6+ layers)", fill=BRAND_ROSE, font=font_mono)
-    draw.text((60, 355), "WITH ZELTRIN:    App -> In-Process Engine (<0.3ms latency, 0 glue code)", fill=BRAND_EMERALD, font=font_mono)
+    draw.text((60, 325), "WITHOUT JOLTRIN: App -> DB + Queue + Locks + Retries + Failover (6+ layers)", fill=BRAND_ROSE, font=font_mono)
+    draw.text((60, 355), "WITH JOLTRIN:    App -> In-Process Engine (<0.3ms latency, 0 glue code)", fill=BRAND_EMERALD, font=font_mono)
     
     frames.append(img)
 
@@ -111,7 +111,7 @@ for i in range(12):
     
     # Terminal display
     draw.rounded_rectangle([(60, 145), (740, 385)], radius=10, fill=(5, 8, 14), outline=BORDER_COLOR, width=1)
-    draw.text((80, 165), ">>> [Zeltrin WASM] Initialized Transaction TX-000842 (Browser V8 Sandbox)", fill=BRAND_CYAN, font=font_mono)
+    draw.text((80, 165), ">>> [Joltrin WASM] Initialized Transaction TX-000842 (Browser V8 Sandbox)", fill=BRAND_CYAN, font=font_mono)
     draw.text((80, 192), ">>> [ACID Isolation] Acquired B-Tree latch in Snapshot Isolation mode", fill=TEXT_MUTED, font=font_mono)
     draw.text((80, 219), ">>> [Mutation] Debited $250,000.00 from acc:001 (Acme Treasury)", fill=BRAND_VIOLET, font=font_mono)
     draw.text((80, 246), ">>> [Mutation] Credited $250,000.00 to acc:002 (Starlight Fund)", fill=BRAND_VIOLET, font=font_mono)
@@ -121,12 +121,12 @@ for i in range(12):
     
     frames.append(img)
 
-# --- SCENE 3: Demo 2: Zeltrin Arena Topology (12 frames) ---
+# --- SCENE 3: Demo 2: Joltrin Arena Topology (12 frames) ---
 for i in range(12):
     img, draw = create_base_canvas()
     
     draw.rounded_rectangle([(60, 65), (295, 92)], radius=8, fill=(24, 18, 42), outline=BRAND_VIOLET, width=1)
-    draw.text((74, 71), "DEMO 2: ZELTRIN ARENA SIMULATOR", fill=BRAND_VIOLET, font=font_mono)
+    draw.text((74, 71), "DEMO 2: JOLTRIN ARENA SIMULATOR", fill=BRAND_VIOLET, font=font_mono)
     
     draw.text((60, 105), "Live Distributed Systems Survival Mission", fill=TEXT_WHITE, font=font_title)
     
@@ -140,7 +140,7 @@ for i in range(12):
     
     # Coordinator
     draw.rounded_rectangle([(260, 195), (415, 285)], radius=10, fill=(16, 28, 48), outline=BRAND_CYAN, width=2)
-    draw.text((275, 212), "ZELTRIN KERNEL", fill=BRAND_CYAN, font=font_subtitle)
+    draw.text((275, 212), "JOLTRIN KERNEL", fill=BRAND_CYAN, font=font_subtitle)
     draw.text((275, 238), "OCC Coordinator", fill=TEXT_MUTED, font=font_small)
     draw.text((275, 258), "0-Master Swarm", fill=TEXT_MUTED, font=font_small)
     
@@ -190,7 +190,7 @@ for i in range(10):
     
     frames.append(img)
 
-# --- SCENE 5: Zeltrin Autonomous Self-Healing (12 frames) ---
+# --- SCENE 5: Joltrin Autonomous Self-Healing (12 frames) ---
 for i in range(12):
     img, draw = create_base_canvas()
     
@@ -242,17 +242,17 @@ for i in range(14):
     
     draw.rounded_rectangle([(60, 145), (740, 385)], radius=10, fill=CARD_BG, outline=BORDER_COLOR, width=1)
     
-    draw.text((85, 175), "DATA + COMPUTE + COORDINATION + TRANSACTIONS -> ZELTRIN", fill=BRAND_CYAN, font=font_subtitle)
+    draw.text((85, 175), "DATA + COMPUTE + COORDINATION + TRANSACTIONS -> JOLTRIN", fill=BRAND_CYAN, font=font_subtitle)
     draw.text((85, 210), "* Persistent Context: AI agent reasoning buffers commit atomically in <15ms", fill=TEXT_WHITE, font=font_body)
     draw.text((85, 240), "* Vector Search: 128-d cosine similarity evaluated locally in memory", fill=TEXT_WHITE, font=font_body)
     draw.text((85, 270), "* Resilient Swarm: Workers join and leave without orphan locks or dropped tasks", fill=TEXT_WHITE, font=font_body)
     draw.text((85, 315), "Experience all 3 live interactive experiences on GitHub Pages:", fill=BRAND_CYAN, font=font_mono)
-    draw.text((85, 342), "sharedcode.github.io/zeltrin  |  /arena  |  /agents", fill=TEXT_WHITE, font=font_mono)
+    draw.text((85, 342), "sharedcode.github.io/joltrin  |  /arena  |  /agents", fill=TEXT_WHITE, font=font_mono)
     
     frames.append(img)
 
-# Save as optimized GIF to docs/assets/sop-demo.gif and docs/assets/zeltrin-demo.gif
-out_paths = ["docs/assets/sop-demo.gif", "docs/assets/zeltrin-demo.gif"]
+# Save as optimized GIF to docs/assets/sop-demo.gif and docs/assets/joltrin-demo.gif
+out_paths = ["docs/assets/sop-demo.gif", "docs/assets/joltrin-demo.gif"]
 for p in out_paths:
     frames[0].save(
         p,

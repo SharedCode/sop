@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/joltrin"
 )
 
 func TestInMemoryCache_Concurrency(t *testing.T) {

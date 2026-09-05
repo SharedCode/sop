@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/json"
 
-	"github.com/sharedcode/zeltrin/ai/memory"
+	"github.com/sharedcode/joltrin/ai/memory"
 )
 
 // AddSpaceCategoryRequest defines the JSON payload required to create a new Category in a Space.

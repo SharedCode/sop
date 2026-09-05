@@ -3,7 +3,7 @@ package btree
 import (
 	"testing"
 
-	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/joltrin"
 )
 
 // helper to construct a test btree with fake repos

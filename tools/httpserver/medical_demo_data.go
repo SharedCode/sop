@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/ai/database"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/ai/database"
 )
 
 // PopulateMedicalKnowledgeBase initializes the stores used for the "medical expert" use-case.

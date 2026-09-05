@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/btree"
-	"github.com/sharedcode/zeltrin/common"
-	"github.com/sharedcode/zeltrin/database"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/btree"
+	"github.com/sharedcode/joltrin/common"
+	"github.com/sharedcode/joltrin/database"
 )
 
 // StoreAccessor provides a unified interface for accessing both primitive and JSON B-Trees.

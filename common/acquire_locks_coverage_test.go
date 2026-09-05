@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/common/mocks"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/common/mocks"
 )
 
 func Test_AcquireLocks_GeneratesCorrectLockKeys(t *testing.T) {

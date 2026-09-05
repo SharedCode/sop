@@ -188,7 +188,7 @@ If **clustered**, no worries, as SOP takes care of Redis-based coordination with
 
 For production environments (e.g., Kubernetes, Docker, Linux Servers), you should run the standalone binary directly instead of using the `dotnet tool` wrapper.
 
-1.  **Download**: Get the latest binary for your platform (Linux, Windows, macOS) from the [GitHub Releases](https://github.com/sharedcode/zeltrin/releases) page.
+1.  **Download**: Get the latest binary for your platform (Linux, Windows, macOS) from the [GitHub Releases](https://github.com/sharedcode/joltrin/releases) page.
 2.  **Run**: Execute the binary with your configuration.
 
 **Example (Docker/Kubernetes):**

@@ -10,8 +10,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/sharedcode/zeltrin/encoding"
-	"github.com/sharedcode/zeltrin/jsondb"
+	"github.com/sharedcode/joltrin/encoding"
+	"github.com/sharedcode/joltrin/jsondb"
 )
 
 type btreeAction int

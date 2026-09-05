@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/ai"
-	"github.com/sharedcode/zeltrin/ai/database"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/ai"
+	"github.com/sharedcode/joltrin/ai/database"
 )
 
 // TestScriptParameterizationWorkflow demonstrates how a recorded script with hardcoded values

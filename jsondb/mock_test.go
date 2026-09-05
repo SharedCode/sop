@@ -3,8 +3,8 @@ package jsondb
 import (
 	"context"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/btree"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/btree"
 )
 
 type mockBtree[TK btree.Ordered, TV any] struct {

@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/btree"
-	"github.com/sharedcode/zeltrin/cache"
-	"github.com/sharedcode/zeltrin/common/mocks"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/btree"
+	"github.com/sharedcode/joltrin/cache"
+	"github.com/sharedcode/joltrin/common/mocks"
 )
 
 // Covers commitNewRootNodes branch where an existing non-empty root is found -> returns (false, nil, nil)

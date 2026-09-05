@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/demo.sh: Unified interactive demo and verification script for Zeltrin (formerly SOP).
+# scripts/demo.sh: Unified interactive demo and verification script for Joltrin (formerly SOP).
 # Reproduces README terminal recordings and runs local protocol smoke tests.
 
 set -euo pipefail
@@ -30,14 +30,14 @@ fi
 check_prerequisites() {
   if ! command -v go &>/dev/null; then
     echo -e "${RED}${BOLD}Error: 'go' binary not found in PATH.${NC}"
-    echo "Zeltrin requires Go 1.22+ to build and run."
+    echo "Joltrin requires Go 1.22+ to build and run."
     echo ""
     echo "Available options:"
     echo "  1. Install Go from https://go.dev/dl/ (or brew install go / apt install golang)"
     echo "  2. Run via Docker without a local Go toolchain:"
     echo "     docker run --rm -it -v \"\$PWD\":/src -w /src golang:1.26-alpine ./scripts/demo.sh"
     echo "  3. Pull the published quickstart container:"
-    echo "     docker run --rm ghcr.io/sharedcode/zeltrin-quickstart"
+    echo "     docker run --rm ghcr.io/sharedcode/joltrin-quickstart"
     exit 1
   fi
 }
@@ -166,7 +166,7 @@ interactive_menu() {
   while true; do
     echo ""
     echo -e "${BLUE}${BOLD}================================================================${NC}"
-    echo -e "${CYAN}${BOLD}                Zeltrin Interactive Demo Suite                  ${NC}"
+    echo -e "${CYAN}${BOLD}                Joltrin Interactive Demo Suite                  ${NC}"
     echo -e "${BLUE}${BOLD}================================================================${NC}"
     echo "Select an option to run:"
     echo "  1) Verification Barrier Demo (precondition precedence check)"

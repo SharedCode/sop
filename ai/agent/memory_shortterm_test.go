@@ -3,8 +3,8 @@ package agent
 import (
 	"testing"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/ai"
 )
 
 func TestShortTermMemory_AddThreadPromoteAndGetCurrent(t *testing.T) {

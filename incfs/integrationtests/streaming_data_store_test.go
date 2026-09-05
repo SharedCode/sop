@@ -8,9 +8,9 @@ import (
 	"io"
 	"testing"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/incfs"
-	sd "github.com/sharedcode/zeltrin/streamingdata"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/incfs"
+	sd "github.com/sharedcode/joltrin/streamingdata"
 )
 
 func Test_StreamingDataStoreInvalidCases(t *testing.T) {

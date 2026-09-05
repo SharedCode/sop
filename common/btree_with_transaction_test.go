@@ -5,8 +5,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/btree"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/btree"
 )
 
 var ctx = context.Background()

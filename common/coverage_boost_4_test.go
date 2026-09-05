@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/btree"
-	"github.com/sharedcode/zeltrin/cache"
-	"github.com/sharedcode/zeltrin/common/mocks"
-	"github.com/sharedcode/zeltrin/encoding"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/btree"
+	"github.com/sharedcode/joltrin/cache"
+	"github.com/sharedcode/joltrin/common/mocks"
+	"github.com/sharedcode/joltrin/encoding"
 )
 
 // --- New tests to lift remaining low-coverage branches ---

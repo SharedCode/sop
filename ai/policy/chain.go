@@ -3,7 +3,7 @@ package policy
 import (
 	"context"
 
-	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/joltrin/ai"
 )
 
 // Chain combines multiple policy engines into one.

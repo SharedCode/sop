@@ -3,8 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/ai/database"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/ai/database"
 )
 
 func main() {

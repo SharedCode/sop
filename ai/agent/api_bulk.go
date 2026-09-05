@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/joltrin/ai"
 )
 
 // BulkAdd inserts multiple items with transaction control (first-class API)

@@ -7,7 +7,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/joltrin"
 )
 
 // (from remove_current_item_test.go)

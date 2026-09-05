@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/joltrin/ai"
 )
 
 type carryoverDecision struct {

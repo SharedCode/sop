@@ -1,12 +1,12 @@
 ---
-title: Zeltrin Data & Compute Platform
+title: Joltrin Data & Compute Platform
 ---
 
-# Zeltrin: one engine for data and compute
+# Joltrin: one engine for data and compute
 
-Zeltrin (formerly SOP) is an ACID-compliant B-Tree storage engine with a distributed coordination model built in. It runs embedded in your process on a laptop, and the same code scales out to a cluster that shares storage and coordination state. No separate database server to operate.
+Joltrin (formerly SOP) is an ACID-compliant B-Tree storage engine with a distributed coordination model built in. It runs embedded in your process on a laptop, and the same code scales out to a cluster that shares storage and coordination state. No separate database server to operate.
 
-![Zeltrin demo](docs/assets/zeltrin-demo.gif)
+![Joltrin demo](docs/assets/joltrin-demo.gif)
 
 ```
 go run ./examples/quickstart
@@ -24,10 +24,10 @@ go run ./examples/quickstart
 
 | Channel | Command |
 | :--- | :--- |
-| Go | `go get github.com/sharedcode/zeltrin` |
+| Go | `go get github.com/sharedcode/joltrin` |
 | Python | `pip install sop4py` |
 | C# | `dotnet add package Sop` |
-| Container demo | `docker run ghcr.io/sharedcode/zeltrin-quickstart:stable` |
+| Container demo | `docker run ghcr.io/sharedcode/joltrin-quickstart:stable` |
 
 ## Learn more
 
@@ -37,6 +37,6 @@ go run ./examples/quickstart
 - [Cookbook](docs/COOKBOOK.md)
 - [Scalability](docs/SCALABILITY.md)
 - [Changelog](CHANGELOG.md)
-- [Source and releases](https://github.com/SharedCode/zeltrin)
+- [Source and releases](https://github.com/SharedCode/joltrin)
 
 Every commit to master runs the full delivery pipeline: build, tests, container packaging, a staging smoke test, then a human-approved promotion to production and this site.

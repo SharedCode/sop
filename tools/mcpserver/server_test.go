@@ -8,8 +8,8 @@ import (
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
 
-	"github.com/sharedcode/zeltrin/ai/verify"
-	"github.com/sharedcode/zeltrin/tools/runbookstore"
+	"github.com/sharedcode/joltrin/ai/verify"
+	"github.com/sharedcode/joltrin/tools/runbookstore"
 )
 
 // dbMaintenanceWorkflow mirrors ai/verify's own test fixture: production

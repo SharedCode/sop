@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/sharedcode/zeltrin/btree"
+	"github.com/sharedcode/joltrin/btree"
 )
 
 const (

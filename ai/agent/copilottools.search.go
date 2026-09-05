@@ -9,10 +9,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/ai"
-	"github.com/sharedcode/zeltrin/ai/database"
-	"github.com/sharedcode/zeltrin/ai/memory"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/ai"
+	"github.com/sharedcode/joltrin/ai/database"
+	"github.com/sharedcode/joltrin/ai/memory"
 )
 
 // Only strip routing tokens that the system recognizes at the start of the query.

@@ -3,7 +3,7 @@ package btree
 import (
 	"testing"
 
-	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/joltrin"
 )
 
 func TestUpsert_Table(t *testing.T) {

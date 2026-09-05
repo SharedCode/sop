@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/ai"
 )
 
 type carryoverTestGenerator struct{}

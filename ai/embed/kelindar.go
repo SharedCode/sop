@@ -3,7 +3,7 @@ package embed
 import (
 	"fmt"
 
-	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/joltrin/ai"
 )
 
 // NewKelindarEmbedder creates a reusable local embedder for the Kelindar/Nomic stack.

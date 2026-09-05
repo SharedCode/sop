@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/sharedcode/zeltrin/common/mocks"
+	"github.com/sharedcode/joltrin/common/mocks"
 )
 
 // Covers replicationTracker.failover error path when writing replication status to passive fails.

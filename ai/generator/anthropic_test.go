@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/joltrin/ai"
 )
 
 func TestAnthropicGenerate_BasicTextGeneration(t *testing.T) {

@@ -13,7 +13,7 @@ import (
 	"syscall/js"
 	"time"
 
-	"github.com/sharedcode/zeltrin/inmemory"
+	"github.com/sharedcode/joltrin/inmemory"
 )
 
 // Global database state running entirely in-browser memory.
@@ -246,7 +246,7 @@ func (d *DemoDB) executeTransaction(req TransactionRequest) TransactionResponse 
 			DurationMicroseconds: dur.Microseconds(),
 			DurationFormatted:    fmt.Sprintf("%d µs (%.3f ms)", dur.Microseconds(), float64(dur.Nanoseconds())/1e6),
 			NetworkCalls:         0,
-			StorageEngine:        "Zeltrin Embedded B-Tree (WebAssembly)",
+			StorageEngine:        "Joltrin Embedded B-Tree (WebAssembly)",
 			IsolationLevel:       "Serializable OCC",
 			AffectedRecords:      0,
 			ExecutionLogs:        logs,
@@ -282,7 +282,7 @@ func (d *DemoDB) executeTransaction(req TransactionRequest) TransactionResponse 
 				DurationMicroseconds: dur.Microseconds(),
 				DurationFormatted:    fmt.Sprintf("%d µs", dur.Microseconds()),
 				NetworkCalls:         0,
-				StorageEngine:        "Zeltrin Embedded B-Tree",
+				StorageEngine:        "Joltrin Embedded B-Tree",
 				ExecutionLogs:        logs,
 				ErrorMessage:         "Source account not found",
 			}
@@ -299,7 +299,7 @@ func (d *DemoDB) executeTransaction(req TransactionRequest) TransactionResponse 
 				DurationMicroseconds: dur.Microseconds(),
 				DurationFormatted:    fmt.Sprintf("%d µs", dur.Microseconds()),
 				NetworkCalls:         0,
-				StorageEngine:        "Zeltrin Embedded B-Tree",
+				StorageEngine:        "Joltrin Embedded B-Tree",
 				ExecutionLogs:        logs,
 				ErrorMessage:         "Destination account not found",
 			}
@@ -325,7 +325,7 @@ func (d *DemoDB) executeTransaction(req TransactionRequest) TransactionResponse 
 				DurationMicroseconds: dur.Microseconds(),
 				DurationFormatted:    fmt.Sprintf("%d µs", dur.Microseconds()),
 				NetworkCalls:         0,
-				StorageEngine:        "Zeltrin Embedded B-Tree",
+				StorageEngine:        "Joltrin Embedded B-Tree",
 				ExecutionLogs:        logs,
 				ErrorMessage:         "Insufficient funds (Consistency check prevented illegal balance)",
 			}
@@ -342,7 +342,7 @@ func (d *DemoDB) executeTransaction(req TransactionRequest) TransactionResponse 
 				DurationMicroseconds: dur.Microseconds(),
 				DurationFormatted:    fmt.Sprintf("%d µs", dur.Microseconds()),
 				NetworkCalls:         0,
-				StorageEngine:        "Zeltrin Embedded B-Tree",
+				StorageEngine:        "Joltrin Embedded B-Tree",
 				ExecutionLogs:        logs,
 				ErrorMessage:         "Simulated network/host crash: Automatic atomicity rollback succeeded",
 			}
@@ -380,7 +380,7 @@ func (d *DemoDB) executeTransaction(req TransactionRequest) TransactionResponse 
 			DurationMicroseconds: dur.Microseconds(),
 			DurationFormatted:    fmt.Sprintf("%d µs (%.3f ms)", dur.Microseconds(), float64(dur.Nanoseconds())/1e6),
 			NetworkCalls:         0,
-			StorageEngine:        "Zeltrin Embedded B-Tree (WebAssembly)",
+			StorageEngine:        "Joltrin Embedded B-Tree (WebAssembly)",
 			IsolationLevel:       "Strict Serializable",
 			AffectedRecords:      2,
 			ExecutionLogs:        logs,
@@ -407,7 +407,7 @@ func (d *DemoDB) executeTransaction(req TransactionRequest) TransactionResponse 
 			DurationMicroseconds: dur.Microseconds(),
 			DurationFormatted:    fmt.Sprintf("%d µs (%.3f ms)", dur.Microseconds(), float64(dur.Nanoseconds())/1e6),
 			NetworkCalls:         0,
-			StorageEngine:        "Zeltrin Embedded B-Tree",
+			StorageEngine:        "Joltrin Embedded B-Tree",
 			IsolationLevel:       "Snapshot Isolation",
 			AffectedRecords:      count,
 			ExecutionLogs:        logs,
@@ -422,7 +422,7 @@ func (d *DemoDB) executeTransaction(req TransactionRequest) TransactionResponse 
 		DurationMicroseconds: dur.Microseconds(),
 		DurationFormatted:    fmt.Sprintf("%d µs", dur.Microseconds()),
 		NetworkCalls:         0,
-		StorageEngine:        "Zeltrin Embedded B-Tree",
+		StorageEngine:        "Joltrin Embedded B-Tree",
 		ExecutionLogs:        logs,
 	}
 }
@@ -524,7 +524,7 @@ func (d *DemoDB) runStressBenchmark(numOps int) BenchmarkResult {
 		OpsPerSecond:         math.Round(opsPerSec),
 		AvgLatencyMicros:     math.Round(avgUs*100) / 100,
 		NetworkCalls:         0,
-		MemoryEngine:         "Zeltrin In-Memory B-Tree Node Allocator",
+		MemoryEngine:         "Joltrin In-Memory B-Tree Node Allocator",
 	}
 }
 
@@ -609,7 +609,7 @@ func jsGetLedgerAccounts(this js.Value, args []js.Value) any {
 // jsGetEngineInfo exposes sopGetEngineInfo() to JS.
 func jsGetEngineInfo(this js.Value, args []js.Value) any {
 	info := map[string]any{
-		"engineName":     "Zeltrin (formerly SOP)",
+		"engineName":     "Joltrin (formerly SOP)",
 		"runtime":        "WebAssembly (WASM) / Go",
 		"architecture":   "Zero-Server Client-Side Embedded Engine",
 		"acidCompliance": "Strict Serializable (WAL + Snapshot Isolation)",
@@ -624,46 +624,46 @@ func jsGetEngineInfo(this js.Value, args []js.Value) any {
 }
 
 func main() {
-	// Register globally accessible JavaScript functions (zeltrin* canonical, engram* and sop* for backwards compatibility)
-	register := func(zeltrinName, engramName, sopName string, fn js.Func) {
-		js.Global().Set(zeltrinName, fn)
+	// Register globally accessible JavaScript functions (joltrin* canonical, engram* and sop* for backwards compatibility)
+	register := func(joltrinName, engramName, sopName string, fn js.Func) {
+		js.Global().Set(joltrinName, fn)
 		js.Global().Set(engramName, fn)
 		js.Global().Set(sopName, fn)
 	}
 
-	register("zeltrinRunTransaction", "engramRunTransaction", "sopRunTransaction", js.FuncOf(jsRunTransaction))
-	register("zeltrinVectorSearch", "engramVectorSearch", "sopVectorSearch", js.FuncOf(jsVectorSearch))
-	register("zeltrinBenchmark", "engramBenchmark", "sopBenchmark", js.FuncOf(jsBenchmark))
-	register("zeltrinGetLedgerAccounts", "engramGetLedgerAccounts", "sopGetLedgerAccounts", js.FuncOf(jsGetLedgerAccounts))
-	register("zeltrinGetEngineInfo", "engramGetEngineInfo", "sopGetEngineInfo", js.FuncOf(jsGetEngineInfo))
-	register("zeltrinAgentStart", "engramAgentStart", "sopAgentStart", js.FuncOf(jsAgentStart))
-	register("zeltrinAgentStep", "engramAgentStep", "sopAgentStep", js.FuncOf(jsAgentStep))
-	register("zeltrinAgentKill", "engramAgentKill", "sopAgentKill", js.FuncOf(jsAgentKill))
-	register("zeltrinAgentResume", "engramAgentResume", "sopAgentResume", js.FuncOf(jsAgentResume))
-	register("zeltrinAgentTrace", "engramAgentTrace", "sopAgentTrace", js.FuncOf(jsAgentTrace))
-	register("zeltrinAgentRecall", "engramAgentRecall", "sopAgentRecall", js.FuncOf(jsAgentRecall))
-	register("zeltrinOPFSStatus", "engramOPFSStatus", "sopOPFSStatus", js.FuncOf(jsOPFSStatus))
-	register("zeltrinOPFSReset", "engramOPFSReset", "sopOPFSReset", js.FuncOf(jsOPFSReset))
+	register("joltrinRunTransaction", "engramRunTransaction", "sopRunTransaction", js.FuncOf(jsRunTransaction))
+	register("joltrinVectorSearch", "engramVectorSearch", "sopVectorSearch", js.FuncOf(jsVectorSearch))
+	register("joltrinBenchmark", "engramBenchmark", "sopBenchmark", js.FuncOf(jsBenchmark))
+	register("joltrinGetLedgerAccounts", "engramGetLedgerAccounts", "sopGetLedgerAccounts", js.FuncOf(jsGetLedgerAccounts))
+	register("joltrinGetEngineInfo", "engramGetEngineInfo", "sopGetEngineInfo", js.FuncOf(jsGetEngineInfo))
+	register("joltrinAgentStart", "engramAgentStart", "sopAgentStart", js.FuncOf(jsAgentStart))
+	register("joltrinAgentStep", "engramAgentStep", "sopAgentStep", js.FuncOf(jsAgentStep))
+	register("joltrinAgentKill", "engramAgentKill", "sopAgentKill", js.FuncOf(jsAgentKill))
+	register("joltrinAgentResume", "engramAgentResume", "sopAgentResume", js.FuncOf(jsAgentResume))
+	register("joltrinAgentTrace", "engramAgentTrace", "sopAgentTrace", js.FuncOf(jsAgentTrace))
+	register("joltrinAgentRecall", "engramAgentRecall", "sopAgentRecall", js.FuncOf(jsAgentRecall))
+	register("joltrinOPFSStatus", "engramOPFSStatus", "sopOPFSStatus", js.FuncOf(jsOPFSStatus))
+	register("joltrinOPFSReset", "engramOPFSReset", "sopOPFSReset", js.FuncOf(jsOPFSReset))
 
 	// Attempt to restore prior session state from OPFS before signaling ready
 	hydrateFromOPFS()
 
 	// Signal to frontend that the Go WebAssembly runtime is loaded and ready
-	js.Global().Set("__ZELTRIN_WASM_READY__", js.ValueOf(true))
+	js.Global().Set("__JOLTRIN_WASM_READY__", js.ValueOf(true))
 	js.Global().Set("__ENGRAM_WASM_READY__", js.ValueOf(true))
 	js.Global().Set("__SOP_WASM_READY__", js.ValueOf(true))
 
 	// Dispatch custom event to notify DOM listeners
 	if doc := js.Global().Get("document"); !doc.IsUndefined() && !doc.IsNull() {
-		evtZeltrin := js.Global().Get("CustomEvent").New("zeltrin-wasm-ready")
-		doc.Call("dispatchEvent", evtZeltrin)
+		evtJoltrin := js.Global().Get("CustomEvent").New("joltrin-wasm-ready")
+		doc.Call("dispatchEvent", evtJoltrin)
 		evtEngram := js.Global().Get("CustomEvent").New("engram-wasm-ready")
 		doc.Call("dispatchEvent", evtEngram)
 		evtSOP := js.Global().Get("CustomEvent").New("sop-wasm-ready")
 		doc.Call("dispatchEvent", evtSOP)
 	}
 
-	fmt.Println("🚀 [Zeltrin Engine] WebAssembly storage kernel initialized. Zero-server mode ACTIVE.")
+	fmt.Println("🚀 [Joltrin Engine] WebAssembly storage kernel initialized. Zero-server mode ACTIVE.")
 
 	// Keep the Go runtime channel open indefinitely so functions remain callable
 	c := make(chan struct{})

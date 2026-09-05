@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/joltrin"
 )
 
 // Worker represents a node that listens for and executes jobs.

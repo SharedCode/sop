@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/common/mocks"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/common/mocks"
 )
 
 // Ensures CopyToPassiveFolders returns an error when registry source directory cannot be read.

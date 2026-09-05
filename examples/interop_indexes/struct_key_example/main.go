@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/database"
-	"github.com/sharedcode/zeltrin/jsondb"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/database"
+	"github.com/sharedcode/joltrin/jsondb"
 )
 
 // ProductKey is the struct we want to use as the Key.

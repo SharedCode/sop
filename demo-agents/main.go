@@ -15,8 +15,8 @@ import (
 	"fmt"
 	"syscall/js"
 
-	"github.com/sharedcode/zeltrin/ai/verify"
-	"github.com/sharedcode/zeltrin/tools/runbookstore"
+	"github.com/sharedcode/joltrin/ai/verify"
+	"github.com/sharedcode/joltrin/tools/runbookstore"
 )
 
 var (
@@ -114,40 +114,40 @@ func main() {
 	workflow = wf
 	trace = verify.NewTrace()
 
-	// Register canonical Zeltrin functions, plus Engram and SOP aliases for backwards compatibility.
+	// Register canonical Joltrin functions, plus Engram and SOP aliases for backwards compatibility.
 	runbookFn := js.FuncOf(jsRunbook)
 	execStepFn := js.FuncOf(jsExecuteStep)
 	resetFn := js.FuncOf(jsReset)
 	opfsStatusFn := js.FuncOf(jsOPFSStatus)
 
-	js.Global().Set("zeltrinAgentsRunbook", runbookFn)
+	js.Global().Set("joltrinAgentsRunbook", runbookFn)
 	js.Global().Set("engramAgentsRunbook", runbookFn)
 	js.Global().Set("sopAgentsRunbook", runbookFn)
-	js.Global().Set("zeltrinAgentsExecuteStep", execStepFn)
+	js.Global().Set("joltrinAgentsExecuteStep", execStepFn)
 	js.Global().Set("engramAgentsExecuteStep", execStepFn)
 	js.Global().Set("sopAgentsExecuteStep", execStepFn)
-	js.Global().Set("zeltrinAgentsReset", resetFn)
+	js.Global().Set("joltrinAgentsReset", resetFn)
 	js.Global().Set("engramAgentsReset", resetFn)
 	js.Global().Set("sopAgentsReset", resetFn)
-	js.Global().Set("zeltrinAgentsOPFSStatus", opfsStatusFn)
+	js.Global().Set("joltrinAgentsOPFSStatus", opfsStatusFn)
 	js.Global().Set("engramAgentsOPFSStatus", opfsStatusFn)
 	js.Global().Set("sopAgentsOPFSStatus", opfsStatusFn)
 
 	hydrateFromOPFS()
 
-	js.Global().Set("__ZELTRIN_AGENTS_WASM_READY__", js.ValueOf(true))
+	js.Global().Set("__JOLTRIN_AGENTS_WASM_READY__", js.ValueOf(true))
 	js.Global().Set("__ENGRAM_AGENTS_WASM_READY__", js.ValueOf(true))
 	js.Global().Set("__SOP_AGENTS_WASM_READY__", js.ValueOf(true))
 	if doc := js.Global().Get("document"); !doc.IsUndefined() && !doc.IsNull() {
-		evtZeltrin := js.Global().Get("CustomEvent").New("zeltrin-agents-wasm-ready")
-		doc.Call("dispatchEvent", evtZeltrin)
+		evtJoltrin := js.Global().Get("CustomEvent").New("joltrin-agents-wasm-ready")
+		doc.Call("dispatchEvent", evtJoltrin)
 		evtEngram := js.Global().Get("CustomEvent").New("engram-agents-wasm-ready")
 		doc.Call("dispatchEvent", evtEngram)
 		evtSop := js.Global().Get("CustomEvent").New("sop-agents-wasm-ready")
 		doc.Call("dispatchEvent", evtSop)
 	}
 
-	fmt.Println("zeltrin-agents: verification barrier WASM kernel ready")
+	fmt.Println("joltrin-agents: verification barrier WASM kernel ready")
 
 	c := make(chan struct{})
 	<-c

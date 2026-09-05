@@ -16,7 +16,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/sharedcode/zeltrin/tools/a2abridge"
+	"github.com/sharedcode/joltrin/tools/a2abridge"
 )
 
 func main() {

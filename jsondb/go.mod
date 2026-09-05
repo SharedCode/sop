@@ -1,18 +1,18 @@
-module github.com/sharedcode/zeltrin/jsondb
+module github.com/sharedcode/joltrin/jsondb
 
 go 1.26.8
 
-replace github.com/sharedcode/zeltrin => ../
+replace github.com/sharedcode/joltrin => ../
 
-replace github.com/sharedcode/zeltrin/infs => ../infs
+replace github.com/sharedcode/joltrin/infs => ../infs
 
-replace github.com/sharedcode/zeltrin/adapters/redis => ../adapters/redis
+replace github.com/sharedcode/joltrin/adapters/redis => ../adapters/redis
 
-replace github.com/sharedcode/zeltrin/adapters/cassandra => ../adapters/cassandra
+replace github.com/sharedcode/joltrin/adapters/cassandra => ../adapters/cassandra
 
 require (
 	github.com/google/uuid v1.6.0
-	github.com/sharedcode/zeltrin v0.0.0
+	github.com/sharedcode/joltrin v0.0.0
 )
 
 require (
@@ -26,7 +26,7 @@ require (
 	github.com/ncw/directio v1.0.5 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/sethvargo/go-retry v0.3.0 // indirect
-	github.com/sharedcode/zeltrin/infs v0.0.0 // indirect
+	github.com/sharedcode/joltrin/infs v0.0.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f // indirect
 	golang.org/x/sync v0.21.0 // indirect

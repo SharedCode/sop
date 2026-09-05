@@ -1,4 +1,4 @@
-module github.com/sharedcode/zeltrin
+module github.com/sharedcode/joltrin
 
 go 1.26.8
 
