@@ -1,26 +1,41 @@
+# Version control and editor
 .git
+.github
 .venv
 .vscode
 .idea
+
+# Build caches and dependencies
 node_modules
 dist
 build
+vendor/
+.cache/
 *.egg-info
 __pycache__
-data
-tools/httpserver/data_browser
-tools/httpserver/sop-browser
+
+# Foreign language bindings and web frontend
+bindings/
+sop-arena/
+
+# Documentation and assets (preserve embedded prompt templates)
+docs/
+*.md
+!ai/agent/prompts/*.md
+_config.yml
+
+# Test and coverage artifacts
+*.test
+*.out
+*.log
+*.cov
+coverage/
 *.so
 *.dylib
 *.dll
 *.a
-*.test
-*.out
-*.log
-bindings/python/.venv
-bindings/rust/target
 
-# Generated Binaries
+# Generated binaries
 /httpserver
 /httpserver_test
 /main
@@ -29,9 +44,12 @@ bindings/rust/target
 tools/httpserver/httpserver
 tools/httpserver/sop_server
 
-# Generated Data
+# Data directories and runtime logs
+data/
 translogs/
 storelist.txt
 ai/data/
 ai/nurse_output.txt
 ai/storelist.txt
+tools/httpserver/data_browser
+tools/httpserver/sop-browser

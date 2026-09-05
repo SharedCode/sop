@@ -25,6 +25,18 @@ Instead of managing separate database servers, message brokers, caching tiers, a
   <img src="docs/assets/sop-demo.gif" alt="Live SOP WASM demo: executing an ACID transfer and killing/resuming a checkpointed AI agent mid-task, both running client-side with zero network calls after initial page load" width="760" />
 </p>
 
+<p align="center">
+  <a href="https://sharedcode.github.io/sop/"><strong>🧠 Launch Technical Demo →</strong></a> &nbsp;&nbsp;|&nbsp;&nbsp;
+  <a href="https://sharedcode.github.io/sop/arena/"><strong>🎮 Play SOP Arena →</strong></a> &nbsp;&nbsp;|&nbsp;&nbsp;
+  <a href="https://sharedcode.github.io/sop/agents/"><strong>🔌 Launch Agent Barrier →</strong></a>
+</p>
+
+| Experience | Description | Live Interactive Link |
+| :--- | :--- | :--- |
+| 🧠 **SOP Technical Demo** | **Client-Side Zero-Server WebAssembly Engine**<br>Execute live ACID transactions, 128-dimensional vector cosine searches, microsecond benchmarks, and durable AI agent memory checkpoints (kill the agent mid-task, watch a successor resume from the B-Tree) running 100% in your browser with **0 runtime HTTP network calls after initial load**. | [**Launch Technical Demo →**](https://sharedcode.github.io/sop/) |
+| 🎮 **SOP Arena** | **Distributed Systems Survival Simulation**<br>Command a live digital cluster. Scale worker swarms, crash storage nodes, trigger transaction storms, and watch SOP automatically redistribute tasks and rebuild parity in real-time. | [**Play SOP Arena →**](https://sharedcode.github.io/sop/arena/) |
+| 🔌 **Agent Verification Barrier** | **The MCP/A2A Safety Check, Clickable**<br>The same `ai/verify` barrier gating `tools/mcpserver` and `tools/a2aagent`, compiled to WASM. Try dropping a database before validating a backup and watch it get blocked, in your browser, with the trace persisted to OPFS. | [**Launch Agent Barrier →**](https://sharedcode.github.io/sop/agents/) |
+
 ---
 
 ## ⚡ Try It in 30 Seconds
