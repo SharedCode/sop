@@ -3,7 +3,7 @@
 // This demo shows how the new ThinkingLevel and ResponseSchema features
 // are automatically applied in the SOP AI agent system.
 //
-// Run: go run ai/demo_gemini_optimizations.go
+// Run: go run ./examples/demo_gemini_optimizations.go
 package main
 
 import (

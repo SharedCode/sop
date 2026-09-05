@@ -6,6 +6,8 @@
 // call, wired to buttons instead of protocol calls, so the barrier itself
 // is something a visitor can click through live rather than only read
 // about.
+//go:build js && wasm
+
 package main
 
 import (
