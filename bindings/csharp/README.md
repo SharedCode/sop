@@ -1,6 +1,6 @@
-# Engram for C# (Sop4CS)
+# Zeltrin for C# (Sop4CS)
 
-**Engram** (distributed on NuGet as `Sop4CS`, formerly SOP / Scalable Objects Persistence) is a high-performance, durable memory and verification infrastructure engine for C#, powered by a Go backend. It combines the raw speed of direct disk I/O with the reliability of ACID transactions and the flexibility of modern AI data management.
+**Zeltrin** (distributed on NuGet as `Sop4CS`, formerly SOP / Scalable Objects Persistence) is a high-performance, durable memory and verification infrastructure engine for C#, powered by a Go backend. It combines the raw speed of direct disk I/O with the reliability of ACID transactions and the flexibility of modern AI data management.
 
 ## Documentation
 

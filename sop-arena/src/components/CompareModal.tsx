@@ -35,12 +35,12 @@ export const CompareModal: React.FC<CompareModalProps> = ({ isOpen, onClose }) =
         {/* Side-by-Side Comparison */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           
-          {/* 1. WITHOUT ENGRAM */}
+          {/* 1. WITHOUT ZELTRIN */}
           <div className="bg-dark-950 rounded-2xl border border-rose-500/30 p-5 space-y-4">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-rose-400 uppercase tracking-wider font-mono flex items-center space-x-1.5">
                 <ShieldAlert className="w-4 h-4" />
-                <span>WITHOUT ENGRAM (Current Stack)</span>
+                <span>WITHOUT ZELTRIN (Current Stack)</span>
               </span>
               <span className="text-[10px] px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 font-mono">6+ Components</span>
             </div>
@@ -74,24 +74,24 @@ export const CompareModal: React.FC<CompareModalProps> = ({ isOpen, onClose }) =
             </ul>
           </div>
 
-          {/* 2. WITH ENGRAM */}
+          {/* 2. WITH ZELTRIN */}
           <div className="bg-dark-950 rounded-2xl border border-brand-500/50 p-5 space-y-4 glow-emerald">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-brand-400 uppercase tracking-wider font-mono flex items-center space-x-1.5">
                 <ShieldCheck className="w-4 h-4" />
-                <span>WITH ENGRAM (Unified Architecture)</span>
+                <span>WITH ZELTRIN (Unified Architecture)</span>
               </span>
               <span className="text-[10px] px-2 py-0.5 rounded bg-brand-500/10 text-brand-400 font-mono font-bold">1 Single Engine</span>
             </div>
 
-            {/* Streamlined Engram Diagram */}
+            {/* Streamlined Zeltrin Diagram */}
             <div className="bg-dark-900 rounded-xl p-3 border border-dark-800 font-mono text-[11px] space-y-2 text-slate-400">
               <div className="p-2 rounded bg-dark-850 border border-dark-700 text-center text-white font-semibold">
                 Application Code
               </div>
               <div className="text-center text-brand-400 font-bold">↓ (Embedded Call / Zero Network Hops)</div>
               <div className="p-3.5 rounded bg-brand-950/60 border border-brand-500/50 text-center text-brand-300 space-y-1 shadow-lg shadow-brand-500/10">
-                <div className="text-xs font-bold text-white">ENGRAM ENGINE</div>
+                <div className="text-xs font-bold text-white">ZELTRIN ENGINE</div>
                 <div className="text-[10px] text-brand-400">Persistent B-Tree + Swarm Compute + ACID Locks + Erasure Coding</div>
               </div>
             </div>

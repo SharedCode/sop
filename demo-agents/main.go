@@ -114,33 +114,40 @@ func main() {
 	workflow = wf
 	trace = verify.NewTrace()
 
-	// Register both modern Engram aliases and legacy sop aliases for backwards compatibility.
+	// Register canonical Zeltrin functions, plus Engram and SOP aliases for backwards compatibility.
 	runbookFn := js.FuncOf(jsRunbook)
 	execStepFn := js.FuncOf(jsExecuteStep)
 	resetFn := js.FuncOf(jsReset)
 	opfsStatusFn := js.FuncOf(jsOPFSStatus)
 
+	js.Global().Set("zeltrinAgentsRunbook", runbookFn)
 	js.Global().Set("engramAgentsRunbook", runbookFn)
 	js.Global().Set("sopAgentsRunbook", runbookFn)
+	js.Global().Set("zeltrinAgentsExecuteStep", execStepFn)
 	js.Global().Set("engramAgentsExecuteStep", execStepFn)
 	js.Global().Set("sopAgentsExecuteStep", execStepFn)
+	js.Global().Set("zeltrinAgentsReset", resetFn)
 	js.Global().Set("engramAgentsReset", resetFn)
 	js.Global().Set("sopAgentsReset", resetFn)
+	js.Global().Set("zeltrinAgentsOPFSStatus", opfsStatusFn)
 	js.Global().Set("engramAgentsOPFSStatus", opfsStatusFn)
 	js.Global().Set("sopAgentsOPFSStatus", opfsStatusFn)
 
 	hydrateFromOPFS()
 
+	js.Global().Set("__ZELTRIN_AGENTS_WASM_READY__", js.ValueOf(true))
 	js.Global().Set("__ENGRAM_AGENTS_WASM_READY__", js.ValueOf(true))
 	js.Global().Set("__SOP_AGENTS_WASM_READY__", js.ValueOf(true))
 	if doc := js.Global().Get("document"); !doc.IsUndefined() && !doc.IsNull() {
+		evtZeltrin := js.Global().Get("CustomEvent").New("zeltrin-agents-wasm-ready")
+		doc.Call("dispatchEvent", evtZeltrin)
 		evtEngram := js.Global().Get("CustomEvent").New("engram-agents-wasm-ready")
 		doc.Call("dispatchEvent", evtEngram)
 		evtSop := js.Global().Get("CustomEvent").New("sop-agents-wasm-ready")
 		doc.Call("dispatchEvent", evtSop)
 	}
 
-	fmt.Println("engram-agents: verification barrier WASM kernel ready")
+	fmt.Println("zeltrin-agents: verification barrier WASM kernel ready")
 
 	c := make(chan struct{})
 	<-c

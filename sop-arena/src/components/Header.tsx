@@ -57,7 +57,7 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
           <div>
             <div className="flex items-center space-x-2">
-              <span className="font-extrabold tracking-tight text-white text-lg">ENGRAM ARENA</span>
+              <span className="font-extrabold tracking-tight text-white text-lg">ZELTRIN ARENA</span>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-brand-500/10 border border-brand-500/30 text-brand-400 font-mono font-semibold uppercase">
                 Interactive Sim
               </span>
@@ -73,7 +73,7 @@ export const Header: React.FC<HeaderProps> = ({
           <a
             href="../"
             className="px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1 text-slate-400 hover:text-white transition"
-            title="Switch to Engram Technical Demo"
+            title="Switch to Zeltrin Technical Demo"
           >
             <span>🧠 Tech Demo</span>
           </a>
@@ -113,7 +113,7 @@ export const Header: React.FC<HeaderProps> = ({
           <a
             href="../agents/"
             className="px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1 text-slate-400 hover:text-white transition"
-            title="Switch to Engram Agent Verification Barrier"
+            title="Switch to Zeltrin Agent Verification Barrier"
           >
             <span>🔌 Barrier</span>
           </a>
@@ -134,7 +134,7 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             onClick={onOpenCopilot}
             className="px-3 py-1.5 rounded-lg bg-dark-900 hover:bg-dark-850 text-accent-cyan border border-accent-cyan/30 text-xs font-semibold flex items-center space-x-1.5 shadow-sm transition"
-            title="Ask SOP Copilot"
+            title="Ask Zeltrin Copilot"
           >
             <Sparkles className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Copilot</span>

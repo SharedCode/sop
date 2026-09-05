@@ -23,7 +23,7 @@ export const MissionSuccessModal: React.FC<MissionSuccessModalProps> = ({
   if (!isOpen) return null;
 
   const handleCopyShare = () => {
-    const text = `I just survived the Engram Distributed Systems Disaster with a ${metrics.reliabilityScore.toFixed(1)}% reliability score and 0 dropped writes! Try it: https://sharedcode.github.io/sop/arena/`;
+    const text = `I just survived the Zeltrin Distributed Systems Disaster with a ${metrics.reliabilityScore.toFixed(1)}% reliability score and 0 dropped writes! Try it: https://sharedcode.github.io/sop/arena/`;
     navigator.clipboard.writeText(text).then(() => {
       alert('Challenge link copied to clipboard!');
     });
@@ -63,7 +63,7 @@ export const MissionSuccessModal: React.FC<MissionSuccessModalProps> = ({
           </div>
           <div className="text-brand-400 font-bold text-sm">
             ↓ <br />
-            Engram (formerly SOP)
+            Zeltrin (formerly SOP)
           </div>
         </div>
 
@@ -92,7 +92,7 @@ export const MissionSuccessModal: React.FC<MissionSuccessModalProps> = ({
             className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 font-bold text-xs text-black shadow-lg shadow-brand-500/20 flex items-center justify-center space-x-2 transition"
           >
             <GithubIcon className="w-4 h-4 text-black" />
-            <span>EXPLORE ENGRAM ON GITHUB</span>
+            <span>EXPLORE ZELTRIN ON GITHUB</span>
           </a>
 
           <button
