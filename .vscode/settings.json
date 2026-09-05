@@ -32,4 +32,11 @@
 ],
 "python.testing.pytestEnabled": false,
 "python.testing.unittestEnabled": true,
+"go.useLanguageServer": true,
+"gopls": {
+    "ui.diagnostic.directoryFilters": [
+        "-**/demo",
+        "-**/demo-agents"
+    ]
+}
 }

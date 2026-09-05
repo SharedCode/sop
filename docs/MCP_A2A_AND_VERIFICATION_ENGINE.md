@@ -32,7 +32,7 @@ Client-side OPFS integration for either protocol was **not** attempted in this p
 
 ## Phase 3: Implementation Blueprint
 
-### MCP Server — `tools/mcpserver`
+### MCP Server  -  `tools/mcpserver`
 
 Three tools, exactly as specified, registered against a shared `tools/runbookstore.Store`:
 
@@ -44,7 +44,7 @@ Three tools, exactly as specified, registered against a shared `tools/runbooksto
 
 Verified over the real MCP wire protocol, not just as Go function calls: `tools/mcpserver/server_test.go` uses `mcp-go`'s in-process client (`client.NewInProcessClient`) to actually initialize a session and call all three tools, including a trace-isolation test (two `trace_id`s must not leak state into each other) and a registration-time rejection test (a workflow with an unreachable rollback state is refused before it can ever be served).
 
-### A2A Agent — `tools/a2aagent`
+### A2A Agent  -  `tools/a2aagent`
 
 One skill, `execute_step`, delegated as an A2A task against the same `tools/runbookstore.Store` the MCP server uses. Task lifecycle exactly as specified: `submitted` → `working` → (`input-required` if the barrier blocks it, `completed` if it doesn't, `failed` if the request itself was malformed). A blocked step goes to `input-required`, not `failed`, deliberately: the task is well-formed and could still succeed once its precondition is met, `failed` would incorrectly say it never can.
 
@@ -58,7 +58,7 @@ A real bug this test caught, worth naming because it's the kind of thing that on
 
 ---
 
-## Phase 4: The Verification Engine — `ai/verify`
+## Phase 4: The Verification Engine  -  `ai/verify`
 
 ### What this actually is, stated before what it does
 

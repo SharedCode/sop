@@ -1,6 +1,6 @@
 package generator
 
-// chatgpt_react_loop.go — ChatGPT-owned ReAct (Reason + Act) loop.
+// chatgpt_react_loop.go: ChatGPT-owned ReAct (Reason + Act) loop.
 //
 // Responsibilities:
 //   - Owning the multi-turn tool-call loop against the Responses API.
@@ -97,7 +97,7 @@ func (l chatGPTOwnedReActLoop) Run(ctx context.Context, req ai.ReasoningRequest)
 			return ai.ReasoningResponse{}, err
 		}
 
-		// No tool calls — final answer reached.
+		// No tool calls: final answer reached.
 		if req.Executor == nil || len(toolCalls) == 0 {
 			resp := buildFinalResponse(l.modelName(), openAIResponseFinalText(response), executedToolCalls, toolResults, response.ID, conversationIDFromResponse(response))
 			emitChatGPTOwnedLoopHydration(req, resp)

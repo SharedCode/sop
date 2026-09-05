@@ -228,7 +228,7 @@ See [ai/agent/README_API.md](agent/README_API.md) for complete API documentation
 
 > **Architecture Note**: Spaces have their own **domain-specific API** separate from the database operations API covered in Section 2.1. These are complementary systems serving different purposes.
 
-The AI acts as an **Omni Persona**—managing both underlying B-Trees as a Database Engineer and recognizing "Spaces" or "Knowledge Bases" explicitly.
+The AI acts as an **Omni Persona** - managing both underlying B-Trees as a Database Engineer and recognizing "Spaces" or "Knowledge Bases" explicitly.
 
 A "Space" or "Knowledge Base" (often represented as a single word like "Notes" or "Contacts") is an AI memory subsystem comprised of a VectorDB, Text Search, and a special schema (Thoughts: Category/Items) along with its memory management. When a user asks to generate, translate, upload, or import data into a target Space, the AI **DOES NOT USE ANY RAW DATABASE TOOLS** (e.g., `add`, `bulk_add`, `execute_script`). Treating Spaces like raw B-Trees will result in schema validation errors.
 

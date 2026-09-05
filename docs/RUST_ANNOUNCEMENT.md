@@ -12,7 +12,7 @@ SOP is not just another key-value store. It is a sophisticated storage engine fe
 - **Swarm Computing**: Lock-free concurrent modifications across distributed nodes.
 - **Hybrid Caching**: Built-in L1 (Memory) and L2 (Redis) caching for sub-millisecond latency.
 
-With the new Rust bindings, you get direct access to this engine with **zero-cost abstractions**. We've designed the bindings to feel native to Rust—leveraging ownership, lifetimes, and `Result` types—while the battle-tested Go engine handles the heavy lifting of I/O and concurrency.
+With the new Rust bindings, you get direct access to this engine with **zero-cost abstractions**. We've designed the bindings to feel native to Rust - leveraging ownership, lifetimes, and `Result` types - while the battle-tested Go engine handles the heavy lifting of I/O and concurrency.
 
 ## Why Rust + SOP?
 

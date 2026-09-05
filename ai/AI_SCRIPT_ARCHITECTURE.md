@@ -18,7 +18,7 @@ We call this interface **Natural Language Programming**. The goal is to democrat
 SOP functions as a compiler for this new language:
 1.  **Authoring:** The user describes a workflow: "Check the inventory levels, and if any item is below 10 units, create a reorder request."
 2.  **Compilation:** The Agent translates these high-level intents into **machine-executable scriptlets** (our AST).
-3.  **Runtime:** These scriptlets are stored as Scripts—effectively turning English instructions into repeatable, scalable software artifacts.
+3.  **Runtime:** These scriptlets are stored as Scripts - effectively turning English instructions into repeatable, scalable software artifacts.
 
 This shifts the role of the AI from a passive "assistant" to an active **development platform**, where the "code" is natural language and the "binary" is the JSON-based Script definition.
 
@@ -106,7 +106,7 @@ type StepExecutionResult struct {
 As soon as a step finishes, it is serialized and flushed.
 *   **Low Latency:** The client sees progress immediately.
 *   **Low Memory:** We process 100k records, stream the result, and forget it. No massive buffers.
-*   **Frontend Decoupling:** The backend sends a "Script Trace" (JSON array). The frontend decides how to render it—as a Chat bubble or a CSV table.
+*   **Frontend Decoupling:** The backend sends a "Script Trace" (JSON array). The frontend decides how to render it - as a Chat bubble or a CSV table.
 
 ### 4. Streaming vs. LLM Continuation Payloads
 

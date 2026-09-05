@@ -1,7 +1,7 @@
 package generator
 
 // ----------------------------------------------------------------------------
-// OpenAI Responses API — Wire Types
+// OpenAI Responses API: Wire Types
 // ----------------------------------------------------------------------------
 
 type openAIResponsesRequest struct {
@@ -121,7 +121,7 @@ type openAIResponsesAssistantMessage struct {
 }
 
 // ----------------------------------------------------------------------------
-// OpenAI Chat Completions API — Wire Types
+// OpenAI Chat Completions API: Wire Types
 // ----------------------------------------------------------------------------
 
 type openAIMessage struct {

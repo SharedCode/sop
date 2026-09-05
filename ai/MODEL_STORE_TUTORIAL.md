@@ -1,6 +1,6 @@
 # SOP Model Store Tutorial
 
-The **Model Store** is a specialized component of the SOP AI Kit designed to persist AI model artifacts—such as weights, configurations, prompts, and hyperparameters—alongside your data.
+The **Model Store** is a specialized component of the SOP AI Kit designed to persist AI model artifacts - such as weights, configurations, prompts, and hyperparameters - alongside your data.
 
 Unlike a generic file system, the Model Store is **Transactional**. This means you can update your AI model and your Vector Database in a single, atomic operation. If your training process crashes halfway through, you are guaranteed never to have a "ghost" state where the index is updated but the model weights are not.
 

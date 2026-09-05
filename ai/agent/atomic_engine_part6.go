@@ -748,9 +748,12 @@ func (a *CopilotAgent) opCallScript(ctx context.Context, scriptCtx *ScriptContex
 		sum := sha256.Sum256(bytes)
 		currentHash := hex.EncodeToString(sum[:])
 
-		a.compiledScriptsMu.RLock()
-		cachedEntry, cached := a.compiledScripts[scriptName]
-		a.compiledScriptsMu.RUnlock()
+		cachedEntry, cached := func() (CachedScript, bool) {
+			a.compiledScriptsMu.RLock()
+			defer a.compiledScriptsMu.RUnlock()
+			entry, ok := a.compiledScripts[scriptName]
+			return entry, ok
+		}()
 
 		var compiled CompiledScript
 
@@ -765,9 +768,11 @@ func (a *CopilotAgent) opCallScript(ctx context.Context, scriptCtx *ScriptContex
 				return nil, fmt.Errorf("failed to compile script '%s': %v", scriptName, err)
 			}
 
-			a.compiledScriptsMu.Lock()
-			a.compiledScripts[scriptName] = CachedScript{Script: compiled, Hash: currentHash}
-			a.compiledScriptsMu.Unlock()
+			func() {
+				a.compiledScriptsMu.Lock()
+				defer a.compiledScriptsMu.Unlock()
+				a.compiledScripts[scriptName] = CachedScript{Script: compiled, Hash: currentHash}
+			}()
 		} else {
 			compiled = cachedEntry.Script
 		}

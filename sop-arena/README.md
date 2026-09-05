@@ -1,4 +1,4 @@
-# SOP Arena — Distributed Systems Survival Game & Architecture Demo
+# SOP Arena  -  Distributed Systems Survival Game & Architecture Demo
 
 [![Deploy to GitHub Pages](https://github.com/sharedcode/sop/actions/workflows/deploy-demo.yml/badge.svg)](https://sharedcode.github.io/sop/arena/)
 [![Go Version](https://img.shields.io/badge/Engine-Go_/_WASM-00ADD8?logo=go)](https://github.com/sharedcode/sop)

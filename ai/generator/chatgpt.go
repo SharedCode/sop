@@ -1,6 +1,6 @@
 package generator
 
-// chatgpt.go — Core ChatGPT generator: struct, registration, Name, Generate, EstimateCost.
+// chatgpt.go: Core ChatGPT generator: struct, registration, Name, Generate, EstimateCost.
 //
 // Everything else lives in dedicated files:
 //   - chatgpt_types.go          Wire types for both APIs (Responses + Chat Completions)

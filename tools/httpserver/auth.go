@@ -418,9 +418,11 @@ func currentTokenFacade() TokenFacade {
 	})
 	// Allow TTL to be updated if config changes, without resetting the whole store.
 	if s, ok := tokenFacade.(*SessionStore); ok && s.ttl != sessionTTL() {
-		s.mu.Lock()
-		s.ttl = sessionTTL()
-		s.mu.Unlock()
+		func() {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			s.ttl = sessionTTL()
+		}()
 	}
 	return tokenFacade
 }

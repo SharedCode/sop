@@ -38,9 +38,11 @@ func TimedOut(ctx context.Context, name string, startTime time.Time, maxTime tim
 // RandomSleepWithUnit sleeps for a random multiple (1..4) of the provided unit duration.
 // Useful to jitter conflicting transactions and reduce contention.
 func RandomSleepWithUnit(ctx context.Context, unit time.Duration) {
-	jitterMutex.Lock()
-	sleepTime := time.Duration(jitterRNG.Intn(5))
-	jitterMutex.Unlock()
+	sleepTime := func() time.Duration {
+		jitterMutex.Lock()
+		defer jitterMutex.Unlock()
+		return time.Duration(jitterRNG.Intn(5))
+	}()
 
 	if sleepTime == 0 {
 		sleepTime = 1

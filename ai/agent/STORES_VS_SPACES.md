@@ -38,7 +38,7 @@ Most vendors force a choice:
 - **Search Interface** - Semantic search and BM25 text search in the UI
 - **Document Viewer** - Preview and inspect documents with metadata
 
-**Revolutionary Architecture**: SOP is the **only vector database** that enables visual management of knowledge bases. This isn't just better UI engineering—it's an architectural breakthrough.
+**Revolutionary Architecture**: SOP is the **only vector database** that enables visual management of knowledge bases. This isn't just better UI engineering - it's an architectural breakthrough.
 
 ### Why Other Vector Databases Can't Visualize
 
@@ -161,7 +161,7 @@ Categories (Human Structure) → Items (Content) → Vectors (Spatial Coordinate
    - Every item is editable
    - Every relationship is inspectable
 
-**Result**: Visualization is **architecturally inherent**. KnowledgeBase Studio isn't just a UI—it's a natural consequence of the underlying design.
+**Result**: Visualization is **architecturally inherent**. KnowledgeBase Studio isn't just a UI - it's a natural consequence of the underlying design.
 
 ### Technical Comparison
 
@@ -193,7 +193,7 @@ Categories (Human Structure) → Items (Content) → Vectors (Spatial Coordinate
 - No dependency on expensive optimization cycles
 - Full control over organization and structure
 
-**This is not incremental improvement—it's a paradigm shift in vector database architecture.**
+**This is not incremental improvement - it's a paradigm shift in vector database architecture.**
 
 ---
 
@@ -278,7 +278,7 @@ Analytics Pipeline:
 
 AI-powered knowledge repositories with semantic search, embeddings, and category organization designed for LLM workflows.
 
-**SOP's Architectural Innovation**: Spaces use a **relativity-based architecture** (inspired by Theory of Relativity principles) instead of traditional K-means clustering. This solves the "pigeon hole problem" and enables full visual management—something impossible with K-means vector databases.
+**SOP's Architectural Innovation**: Spaces use a **relativity-based architecture** (inspired by Theory of Relativity principles) instead of traditional K-means clustering. This solves the "pigeon hole problem" and enables full visual management - something impossible with K-means vector databases.
 
 ### When to Use Spaces
 
@@ -538,7 +538,7 @@ Workflow:
 
 ### SOP's Unique Position
 
-**"The only platform that doesn't make you choose—and makes it visualizable"**
+**"The only platform that doesn't make you choose - and makes it visualizable"**
 
 #### Three Unique Advantages
 

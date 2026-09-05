@@ -248,7 +248,7 @@ func buildExplicitRecipes(taskClassification TaskContextClassification) []Recipe
 			Domain:     StoresDomain,
 			Topic:      "Stores read transaction flow",
 			Trigger:    "The ask is ready to execute a grounded read flow with execute_script.",
-			Protocol:   []string{"wrap store reads in begin_tx(mode=read) before open_store", "execute scan/find/filter/project/sort/limit/join inside the same read transaction", "commit_tx or rollback_tx MUST appear as the step immediately before return — never after it", "placing return before commit_tx causes the engine to exit early and skip the commit"},
+			Protocol:   []string{"wrap store reads in begin_tx(mode=read) before open_store", "execute scan/find/filter/project/sort/limit/join inside the same read transaction", "commit_tx or rollback_tx MUST appear as the step immediately before return, never after it", "placing return before commit_tx causes the engine to exit early and skip the commit"},
 			Invariants: []string{"keep execute_script focused on orchestration rather than conversational explanation", "replace only the malformed filter or join slice instead of rewriting the whole plan"},
 			Tags:       []string{"stores", "read", "transaction", "execute_script"},
 			Confidence: 1.0,

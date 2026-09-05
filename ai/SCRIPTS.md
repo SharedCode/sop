@@ -187,7 +187,7 @@ Use `/script parameterize` to perform a smart find-and-replace that turns hardco
 The parameterization engine is comprehensive. When you run `/script parameterize`, it iterates through **every step** in your script sequence. If the concrete value ("John") appears in Step 1, Step 5, and Step 10, *all* of them will be updated to use the `{{.username}}` variable. This ensures consistency across complex workflows.
 
 #### Nested Scripts (Sub-Scripts) and Modular Reuse
-One of the most powerful features of SOP Scripts is composition—scripts calling other scripts. The parameterization tool handles this seamlessly by modifying the **Call Site** (the parent), avoiding any changes to the Child Script.
+One of the most powerful features of SOP Scripts is composition - scripts calling other scripts. The parameterization tool handles this by modifying the **Call Site** (the parent), avoiding any changes to the Child Script.
 
 **Why is this important?**
 If the tool modified the Child Script to use your specific variable name, that Child Script would become "polluted" and non-reusable. By modifying only the *arguments passed* by the Parent, the Child Script remains a comprehensive, generic tool.

@@ -46,26 +46,26 @@ var contextLastID int64
 func createContext() C.longlong {
 	ctx := context.Background()
 	contextLookupLocker.Lock()
+	defer contextLookupLocker.Unlock()
 	contextLastID++
 	id := contextLastID
 
 	contextLookup[id] = ctx
-	contextLookupLocker.Unlock()
 	return C.longlong(id)
 }
 
 //export cancelContext
 func cancelContext(ctxID C.longlong) {
 	id := int64(ctxID)
-	contextLookupLocker.Lock()
-
-	ctx, ok := contextLookup[id]
 	var c context.CancelFunc
-	if ok {
-		_, c = context.WithCancel(ctx)
-	}
-	delete(contextLookup, id)
-	contextLookupLocker.Unlock()
+	func() {
+		contextLookupLocker.Lock()
+		defer contextLookupLocker.Unlock()
+		if ctx, ok := contextLookup[id]; ok {
+			_, c = context.WithCancel(ctx)
+		}
+		delete(contextLookup, id)
+	}()
 
 	// Call the cancel function for the ctx context.
 	if c != nil {
@@ -77,16 +77,15 @@ func cancelContext(ctxID C.longlong) {
 func removeContext(ctxID C.longlong) {
 	id := int64(ctxID)
 	contextLookupLocker.Lock()
+	defer contextLookupLocker.Unlock()
 	delete(contextLookup, id)
-	contextLookupLocker.Unlock()
 }
 
 // Private get context for use internally here.
 func getContext(ctxID C.longlong) context.Context {
 	contextLookupLocker.Lock()
-	ctx := contextLookup[int64(ctxID)]
-	contextLookupLocker.Unlock()
-	return ctx
+	defer contextLookupLocker.Unlock()
+	return contextLookup[int64(ctxID)]
 }
 
 //export contextError

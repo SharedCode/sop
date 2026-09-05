@@ -43,4 +43,4 @@ SOP AI enables **Avatar Mode (Type 2 deployments)**. It performs *Stateless Imme
 
 When introducing SOP AI to developers, businesses, and end-users, this is our position:
 
-> *"Don't hand your most sensitive problems to generic cloud chatbots. SOP AI gives you a dedicated, LLM-agnostic true companion backed by an enterprise-grade local database. We obfuscate your privacy, persist your long-term memory, and let you swap out the AI brains whenever you want—all while you maintain 100% ownership of your data."*
+> *"Don't hand your most sensitive problems to generic cloud chatbots. SOP AI gives you a dedicated, LLM-agnostic true companion backed by an enterprise-grade local database. We obfuscate your privacy, persist your long-term memory, and let you swap out the AI brains whenever you want - all while you maintain 100% ownership of your data."*

@@ -31,12 +31,14 @@ func (m *MetadataObfuscator) Obfuscate(realName string, prefix string) string {
 		return ""
 	}
 
-	m.mu.RLock()
-	if hash, ok := m.realToHash[realName]; ok {
-		m.mu.RUnlock()
+	if hash, ok := func() (string, bool) {
+		m.mu.RLock()
+		defer m.mu.RUnlock()
+		h, ok := m.realToHash[realName]
+		return h, ok
+	}(); ok {
 		return hash
 	}
-	m.mu.RUnlock()
 
 	m.mu.Lock()
 	defer m.mu.Unlock()

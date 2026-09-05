@@ -224,9 +224,11 @@ func (ss *StepStreamer) WriteItem(item any) {
 
 		if !ss.parent.isNDJSON {
 			// Start Array (Only for JSON Array mode)
-			ss.parent.mu.Lock()
-			fmt.Fprint(ss.parent.w, "[")
-			ss.parent.mu.Unlock()
+			func() {
+				ss.parent.mu.Lock()
+				defer ss.parent.mu.Unlock()
+				fmt.Fprint(ss.parent.w, "[")
+			}()
 		}
 	}
 
@@ -481,13 +483,15 @@ func (s *Service) runStepCommand(ctx context.Context, step ai.ScriptStep, scope 
 
 	// Capture step for /last-tool support
 	if s.session != nil {
-		s.session.mu.Lock()
-		recordedStep := step
-		recordedStep.Args = resolvedArgs
-		s.session.LastInteractionToolCalls = append(s.session.LastInteractionToolCalls, recordedStep)
-		// Also update LastStep for robustness (some logic checks LastStep)
-		s.session.LastStep = &recordedStep
-		s.session.mu.Unlock()
+		func() {
+			s.session.mu.Lock()
+			defer s.session.mu.Unlock()
+			recordedStep := step
+			recordedStep.Args = resolvedArgs
+			s.session.LastInteractionToolCalls = append(s.session.LastInteractionToolCalls, recordedStep)
+			// Also update LastStep (used by downstream step inspectors)
+			s.session.LastStep = &recordedStep
+		}()
 	}
 
 	// Execute Tool
@@ -801,12 +805,16 @@ func (s *Service) runStepLoop(ctx context.Context, step ai.ScriptStep, scope map
 	iterator := step.Iterator
 	body := step.Steps
 
+	var val any
+	var ok bool
 	if scopeMu != nil {
-		scopeMu.RLock()
-	}
-	val, ok := scope[listExpr]
-	if scopeMu != nil {
-		scopeMu.RUnlock()
+		func() {
+			scopeMu.RLock()
+			defer scopeMu.RUnlock()
+			val, ok = scope[listExpr]
+		}()
+	} else {
+		val, ok = scope[listExpr]
 	}
 
 	if ok {
@@ -830,11 +838,13 @@ func (s *Service) runStepLoop(ctx context.Context, step ai.ScriptStep, scope map
 					continue
 				}
 				if scopeMu != nil {
-					scopeMu.Lock()
-				}
-				scope[iterator] = line
-				if scopeMu != nil {
-					scopeMu.Unlock()
+					func() {
+						scopeMu.Lock()
+						defer scopeMu.Unlock()
+						scope[iterator] = line
+					}()
+				} else {
+					scope[iterator] = line
 				}
 				if err := s.runSteps(ctx, body, scope, scopeMu, sb, db, cfg); err != nil {
 					return err
@@ -843,11 +853,13 @@ func (s *Service) runStepLoop(ctx context.Context, step ai.ScriptStep, scope map
 		} else if sliceVal, ok := val.([]any); ok {
 			for _, item := range sliceVal {
 				if scopeMu != nil {
-					scopeMu.Lock()
-				}
-				scope[iterator] = item
-				if scopeMu != nil {
-					scopeMu.Unlock()
+					func() {
+						scopeMu.Lock()
+						defer scopeMu.Unlock()
+						scope[iterator] = item
+					}()
+				} else {
+					scope[iterator] = item
 				}
 				if err := s.runSteps(ctx, body, scope, scopeMu, sb, db, cfg); err != nil {
 					return err
@@ -937,13 +949,17 @@ func (s *Service) runStepScript(ctx context.Context, step ai.ScriptStep, scope m
 	// We inherit the current scope, but we might want to override with ScriptArgs
 	nestedScope := make(map[string]any)
 	if scopeMu != nil {
-		scopeMu.RLock()
-	}
-	for k, v := range scope {
-		nestedScope[k] = v
-	}
-	if scopeMu != nil {
-		scopeMu.RUnlock()
+		func() {
+			scopeMu.RLock()
+			defer scopeMu.RUnlock()
+			for k, v := range scope {
+				nestedScope[k] = v
+			}
+		}()
+	} else {
+		for k, v := range scope {
+			nestedScope[k] = v
+		}
 	}
 
 	for k, v := range step.ScriptArgs {

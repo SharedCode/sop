@@ -4,7 +4,7 @@
 **Abstract**
 In the landscape of distributed storage engines, engineers are traditionally forced into a binary trade-off: the strict ACID guarantees of a relational database (which struggle to scale write-heavy, distributed workloads) or the horizontal elasticity of NoSQL systems (which often sacrifice consistency for "eventual" correctness).
 
-**SOP (Scalable Objects Persistence)** introduces a third paradigm. By decoupling **Identity** from **Payload** and enforcing a **Two-Points-in-Time** validation strategy, SOP delivers the read performance of a distributed cache alongside the strict serializability of an RDBMS—all without the need for atomic clocks or high-overhead broadcast protocols.
+**SOP (Scalable Objects Persistence)** introduces a third paradigm. By decoupling **Identity** from **Payload** and enforcing a **Two-Points-in-Time** validation strategy, SOP delivers the read performance of a distributed cache alongside the strict serializability of an RDBMS - all without the need for atomic clocks or high-overhead broadcast protocols.
 
 ---
 
@@ -18,7 +18,7 @@ In high-throughput distributed systems, a "Near Cache" (L1) is essential for per
 
 ### The SOP Solution: "Pheromone" Indirect Synchronization
 
-SOP rejects the premise that heavy data payloads must be synchronized. Instead, it draws inspiration from **Swarm Intelligence**. Ants do not transport a food source to every colony member to prove it exists; they leave a lightweight chemical trail—a pheromone—that points to the source.
+SOP rejects the premise that heavy data payloads must be synchronized. Instead, it draws inspiration from **Swarm Intelligence**. Ants do not transport a food source to every colony member to prove it exists; they leave a lightweight chemical trail - a pheromone - that points to the source.
 
 SOP implements this via **Three-Layer Decoupling**:
 

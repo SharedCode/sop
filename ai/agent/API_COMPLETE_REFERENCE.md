@@ -2,7 +2,7 @@
 
 ## Business Context: Why Two APIs?
 
-**SOP's Unique Value Proposition**: The only platform offering both **Stores** (structured data) and **Spaces** (AI knowledge) under unified ACID transactions—with revolutionary vector architecture enabling full visual management.
+**SOP's Unique Value Proposition**: The only platform offering both **Stores** (structured data) and **Spaces** (AI knowledge) under unified ACID transactions - with revolutionary vector architecture enabling full visual management.
 
 ### Revolutionary Architecture
 

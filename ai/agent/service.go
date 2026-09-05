@@ -977,29 +977,37 @@ func (s *Service) handlePendingUserConfirmation(ctx context.Context, query strin
 		return false, "", nil
 	}
 
-	s.session.mu.Lock()
-	if pending := s.session.PendingConfirmation; pending != nil {
-		if isAffirmativeConfirmation(trimmed) {
-			s.session.PendingConfirmation = nil
-			s.session.mu.Unlock()
+	var pending *PendingUserConfirmation
+	isAffirmative := isAffirmativeConfirmation(trimmed)
+	isNegative := isNegativeConfirmation(trimmed)
+
+	func() {
+		s.session.mu.Lock()
+		defer s.session.mu.Unlock()
+		if p := s.session.PendingConfirmation; p != nil {
+			if isAffirmative || isNegative {
+				s.session.PendingConfirmation = nil
+			}
+			pending = p
+		}
+	}()
+
+	if pending != nil {
+		if isAffirmative {
 			res, err := s.executeDeleteSpaceDirect(ctx, pending.SpaceName, pending.DatabaseName)
 			if err == nil {
 				res = "[[CLEAR_PENDING_CONFIRMATION]]\n" + res
 			}
 			return true, res, err
 		}
-		if isNegativeConfirmation(trimmed) {
-			s.session.PendingConfirmation = nil
-			s.session.mu.Unlock()
+		if isNegative {
 			return true, fmt.Sprintf("[[CLEAR_PENDING_CONFIRMATION]]\nCancelled deletion of Space '%s'.", pending.SpaceName), nil
 		}
-		s.session.mu.Unlock()
 		return true, fmt.Sprintf("Pending deletion confirmation for Space '%s'. Reply 'yes' to confirm or 'no' to cancel.", pending.SpaceName), nil
 	}
 
 	spaceName, ok := parseDeleteSpaceRequest(trimmed)
 	if !ok {
-		s.session.mu.Unlock()
 		return false, "", nil
 	}
 
@@ -1007,12 +1015,16 @@ func (s *Service) handlePendingUserConfirmation(ctx context.Context, query strin
 	if p := ai.GetSessionPayload(ctx); p != nil {
 		dbName = p.CurrentDB
 	}
-	s.session.PendingConfirmation = &PendingUserConfirmation{
-		Kind:         "delete_space",
-		SpaceName:    spaceName,
-		DatabaseName: dbName,
-	}
-	s.session.mu.Unlock()
+
+	func() {
+		s.session.mu.Lock()
+		defer s.session.mu.Unlock()
+		s.session.PendingConfirmation = &PendingUserConfirmation{
+			Kind:         "delete_space",
+			SpaceName:    spaceName,
+			DatabaseName: dbName,
+		}
+	}()
 
 	if dbName != "" {
 		return true, fmt.Sprintf("Delete Space '%s' from database '%s'? Reply 'yes' to confirm or 'no' to cancel.", spaceName, dbName), nil

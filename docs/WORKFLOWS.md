@@ -95,7 +95,7 @@ The `infs` package uses the file system as the storage backend. It works on loca
 
 *   **The Opportunity**: Building a database from scratch requires B-Trees, WAL, locking, transaction managers, and buffer pools.
 *   **The SOP Approach**: SOP provides these lower-level capabilities as a reusable storage layer.
-*   **Your Job**: You focus on the high-level logic—writing the SQL Parser, Query Optimizer, or LINQ Provider.
+*   **Your Job**: You focus on the high-level logic - writing the SQL Parser, Query Optimizer, or LINQ Provider.
 *   **The Result**: A custom ACID-compliant database engine with support for blobs, vectors, and distributed transactions.
 
 ### Scenario I: The Edge-to-Cloud Continuum

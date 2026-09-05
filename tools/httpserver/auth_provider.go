@@ -74,9 +74,12 @@ func (c *Config) resolveAuthProvider() (AuthProvider, error) {
 		return &LocalAuthProvider{cfg: c}, nil
 	}
 
-	authProviderMu.RLock()
-	factory, ok := authProviderRegistry[name]
-	authProviderMu.RUnlock()
+	factory, ok := func() (func(*Config) (AuthProvider, error), bool) {
+		authProviderMu.RLock()
+		defer authProviderMu.RUnlock()
+		f, ok := authProviderRegistry[name]
+		return f, ok
+	}()
 	if !ok {
 		return nil, fmt.Errorf("unknown auth provider %q", name)
 	}

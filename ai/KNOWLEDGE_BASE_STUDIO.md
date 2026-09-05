@@ -4,7 +4,7 @@
 **Status**: MVP Design / Strategic Planning
 
 ## 1. The Vision: "SOP for AI"
-Connecting to an LLM API is the easiest part of building an AI application today. The true, complex challenge—the "hard part"—is **controlling the knowledge that grows**.
+Connecting to an LLM API is the easiest part of building an AI application today. The true, complex challenge - the "hard part" - is **controlling the knowledge that grows**.
 
 To solve this, the SOP platform is evolving into a **Knowledge Base Authoring Studio**. This provides the "SOP for AI," establishing a strict set of foundational capabilities required to make AI manageable, scalable, and safe for enterprise businesses (e.g., Google, hospitals, large corporate IT shops).
 
@@ -72,7 +72,7 @@ Because Knowledge Bases (Spaces) are deterministic, purely isolated, and perfect
 
 **Example Case Study**: An adult male curates and mints a highly specialized Knowledge Base designed to simulate a "Girlfriend Companion." By investing the time to structure deep personality traits, reactions, and conversational history, the AI is able to flawlessly personify this companion. Once shared with friends and proven highly sought after in the ecosystem, the creator can attach a premium price tag to the "Girlfriend" KB and sell access/copies to others seeking a similar experience. 
 
-This transforms highly structured digital knowledge into a financial hotcake—a tradeable asset where users are directly rewarded for their data organization and vectorization investments.
+This transforms highly structured digital knowledge into a financial hotcake - a tradeable asset where users are directly rewarded for their data organization and vectorization investments.
 
 ## 7. Future Refinements & Roadmap
 *(This section is reserved for future planning as we iterate on the MVP design)*

@@ -26,10 +26,10 @@ The UI includes a persistent, **floating AI widget**.
     *   `list_stores()`: To understand your database topology.
     *   `get_schema()`: To analyze the structure and index specifications of your B-Trees.
     *   `search()` & `select()`: To query data directly.
-*   **Visual Feedback**: When the AI performs a search, it doesn't just tell you the results—it can trigger the main data grid to **refresh** and show you the actual records.
+*   **Visual Feedback**: When the AI performs a search, it doesn't just tell you the results - it can trigger the main data grid to **refresh** and show you the actual records.
 
 ## The Paradigm Shift: Introducing "Agentic Data"
-The problem with today's data is that it is too structured—too rigidly SQL (tabular) or too arbitrarily NoSQL (document-based). Traditional schemas force the user to organize data for the *database's* convenience. This makes it difficult for AI to manage, mine, and aggregate data accurately on behalf of the user.
+The problem with today's data is that it is too structured - too rigidly SQL (tabular) or too arbitrarily NoSQL (document-based). Traditional schemas force the user to organize data for the *database's* convenience. This makes it difficult for AI to manage, mine, and aggregate data accurately on behalf of the user.
 
 We invented a new primitive: **Agentic Data**. 
 Instead of forcing data into rigid columns, Agentic Data is auto-managed by the AI. It is stored semantically (via `Concept`, `Category`, and `Description` embeddings) inside dedicated **Playbooks (Knowledge Bases)**. 
@@ -630,7 +630,7 @@ Instead of asking an LLM to generate raw, potentially unsafe code (which is hard
 
 ## The AI Enablers: How We Broke the "Complexity Ceiling"
 
-Many organizations fail to adopt AI for core operations because they hit a "wall" of unreliability or technical debt. We built specific architectural features—our "Moat"—to bypass these limits.
+Many organizations fail to adopt AI for core operations because they hit a "wall" of unreliability or technical debt. We built specific architectural features - our "Moat" - to bypass these limits.
 
 ### 1. "Lazy to Strict" Automatic Refinement
 LLMs yield volatile code. One day they write verbose scripts; the next, they skip variable declarations.
@@ -707,7 +707,7 @@ This is the default mode for administrators and platform engineers.
 
 **Type 2: Target Identification / Avatar Mode (Exclusive Content Immersion)**
 This mode is designed for deploying end-user sandboxes.
-* **How it works:** The LLM does NOT suppress the `OMNI_PERSONA`. Instead, Omni acts as the invisible governing orchestrator. When an Ask routes to an Avatar KB, Omni "hands off" execution—injecting the Avatar's System Prompt and exclusively running the execution slice using the Avatar's constraints and domain logic.
+* **How it works:** The LLM does NOT suppress the `OMNI_PERSONA`. Instead, Omni acts as the invisible governing orchestrator. When an Ask routes to an Avatar KB, Omni "hands off" execution - injecting the Avatar's System Prompt and exclusively running the execution slice using the Avatar's constraints and domain logic.
 * **Best For:** Deploying a strictly compliant Medical Advisor or Legal Auditor where the end-user should not interact with technical backend tools, but the backend still requires SOP's architectural governance.
 
 ### 🎮 The "Game Engine vs. Interactive Character" Analogy
@@ -763,7 +763,7 @@ Beyond implicit enrichment, SOP's long-term direction is to allow a Knowledge Ba
 
 ### Episodic Working Memory (Context Carry-over)
 
-One of the great challenges of interacting with LLMs is the tendency to lose vital execution context—or "skills"—between prompts. Often called "Context Collapse", an LLM might successfully use a database grammar or a complex prompt instruction in turn one, only to forget those precise rules in turn two, requiring the user to re-prompt. 
+One of the great challenges of interacting with LLMs is the tendency to lose vital execution context - or "skills" - between prompts. Often called "Context Collapse", an LLM might successfully use a database grammar or a complex prompt instruction in turn one, only to forget those precise rules in turn two, requiring the user to re-prompt. 
 
 The traditional solution is to inject those rules heavily into the root system prompt, causing prompt-bloat and high token costs.
 
@@ -786,7 +786,7 @@ Instead of bloating indexes with massive payloads, Knowledge Bases decouple the 
 Moving beyond simple pure-LLM classifications or expensive K-Means VectorDB routing, the Copilot has evolved to use a highly deterministic, resource-efficient **Cascading Router**. When interacting through the AI, the query navigates through up to four specialized phases:
 
 1. **Explicit Prefix Match (O(1))**: A constant-time check assessing whether the prompt prefixes match any defined `RoutingPrefix` configuration within the available Domain/Persona Playbooks.
-2. **Global MRU Momentum Match (O(N))**: Scans the most recent conversation threads (Most Recently Used). If consecutive exchanges resolve to the same Avatar/Knowledge Base, the Copilot assumes that context and routing remains locked—avoiding unnecessary LLM overhead.
+2. **Global MRU Momentum Match (O(N))**: Scans the most recent conversation threads (Most Recently Used). If consecutive exchanges resolve to the same Avatar/Knowledge Base, the Copilot assumes that context and routing remains locked - avoiding unnecessary LLM overhead.
 3. **Domain Reference Centroid Match (Vector Math)**: The query vector is mapped against localized, pre-calculated `DomainReference` target vectors specific to each Knowledge Base using Cosine Similarity thresholds.
 4. **LLM Fallback (Heuristic Tiebreaker)**: Only defaults into LLM reasoning if the query fails to hit any of the deterministic thresholds or explicit patterns above. 
 

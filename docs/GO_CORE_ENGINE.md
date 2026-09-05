@@ -7,7 +7,7 @@ By leveraging **direct I/O** rather than delegating to third-party database engi
 <h3> Key Architectural Benefits</h3>
 
 *   **Embedded B-Tree Muscle**: Built entirely from the ground up, SOP gives Go developers the raw, efficient disk mechanics previously hidden deep inside monolithic DBMS products.
-*   **True Multi-Modal Execution**: Handles arbitrary data sizes effortlessly—from tiny metadata keys to massive streaming blobs (like video files)—all within the same storage interface.
+*   **True Multi-Modal Execution**: Handles arbitrary data sizes effortlessly - from tiny metadata keys to massive streaming blobs (like video files) - all within the same storage interface.
 *   **Hybrid Storage Backends (`incfs`)**: Choose between standard local file systems, or utilize a hybrid backend that pairs **Cassandra** (for registry and metadata) with your **File System** (for heavy data blobs).
 
 > Terminology: In this document, “B-tree” refers to the balanced M-ary (multiway) search tree (per Bayer & McCreight). A trie (prefix tree) is a different structure; SOP uses a B-tree, not a trie.
@@ -635,7 +635,7 @@ SOP uses Redis for fast, ephemeral coordination and the filesystem for durable s
 
 ### Comparison to Paxos-style consensus
 
-- SOP avoids global consensus, leader election, and replicated logs—lower coordination latency and cost.
+- SOP avoids global consensus, leader election, and replicated logs - lower coordination latency and cost.
 - Better horizontal scaling for partitioned workloads (per-sector independence).
 - No SPOF in the coordination layer; failover is trivial and stateless.
 - If you need a globally ordered, cross-region commit log, consensus is still the right tool; SOP targets high-throughput, partition-aligned coordination. But then again, SOP is not a coordination engine, it is a storage engine. Its internal piece for coordination, e.g. - of handle (virtual ID) Registry, is what was described here.
@@ -735,7 +735,7 @@ Check out the integration test that demonstrate this, here: https://github.com/s
 (the sample adds one record but it is not needed, empty Btree will work just fine)
 
 ## Transaction Commit Merging & Swarm Computing
-SOP features a unique "commit merging" capability that acts as a technological moat—something not found in traditional RDBMS like SQL Server, Oracle, or Postgres.
+SOP features a unique "commit merging" capability that acts as a technological moat - something not found in traditional RDBMS like SQL Server, Oracle, or Postgres.
 
 When multiple transactions across different machines or threads commit concurrently, SOP's storage engine automatically detects if they are compatible (non-conflicting). Instead of locking out or failing these concurrent operations, SOP **merges** them.
 
@@ -743,7 +743,7 @@ When multiple transactions across different machines or threads commit concurren
 *   **Simplified Concurrency**: Developers don't need complex locking logic. SOP transactions are natively thread and machine safe. It rolls back only true conflicts and merges everything else.
 *   **Proven at Scale**: These capabilities are demonstrated in the `infs/stresstests`, simulating distributed parallel transaction commits.
 
-SOP encourages applications to use the B-tree store and its derivatives in a simple, synchronization-free manner. The library automatically handles data merging or rolling back in case of conflicts, ensuring data integrity without complex application-level locking. This approach simplifies development while providing fine-grained, key/value-pair level isolation and resolution—a unique capability in distributed storage.
+SOP encourages applications to use the B-tree store and its derivatives in a simple, synchronization-free manner. The library automatically handles data merging or rolling back in case of conflicts, ensuring data integrity without complex application-level locking. This approach simplifies development while providing fine-grained, key/value-pair level isolation and resolution - a unique capability in distributed storage.
 
 It operates like swarm computing: SOP manages coordination across threads and machines in a peer-to-peer, masterless architecture (where every node acts as a master), delivering robust consistency and scalability effortlessly.
 

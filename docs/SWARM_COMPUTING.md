@@ -3,7 +3,7 @@
 
 In the world of distributed systems, we often build architectures that resemble a rigid military hierarchy. We have a "Master" node (the General) and "Worker" nodes (the Soldiers). The General issues commands, tracks every movement, and ensures no two soldiers bump into each other.
 
-This works—until the General gets overwhelmed. As the army grows, the General becomes the bottleneck. The soldiers spend more time waiting for orders than doing work.
+This works - until the General gets overwhelmed. As the army grows, the General becomes the bottleneck. The soldiers spend more time waiting for orders than doing work.
 
 **Scalable Objects Persistence (SOP)** takes a different approach. It is designed not like a military hierarchy, but like a **swarm of ants**.
 
@@ -101,11 +101,11 @@ This transforms the system from a passive data store into an active, living **Sw
 
 #### Enterprise Metadata Coordination & Bootstrapping
 
-In an enterprise environment with multiple nodes spinning up concurrently, orchestrating system-level operations—such as bootstrapping a new Knowledge Base or defining a schema on a shared volume—presents a classic race condition. Traditional architectures solve this by introducing heavy, centralized orchestrators (like ZooKeeper, etcd, or complex Redis distributed locks) to prevent nodes from stepping on each other's shoes.
+In an enterprise environment with multiple nodes spinning up concurrently, orchestrating system-level operations - such as bootstrapping a new Knowledge Base or defining a schema on a shared volume - presents a classic race condition. Traditional architectures solve this by introducing heavy, centralized orchestrators (like ZooKeeper, etcd, or complex Redis distributed locks) to prevent nodes from stepping on each other's shoes.
 
 SOP handles this natively using its own **global transactional database** for metadata tracking. 
 
 When multiple nodes attempt to initialize the same database on the same volume simultaneously, they don't need external orchestration. They simply rely on the Swarm's fundamental property: **Optimistic Concurrency Control (OCC)**. 
 
 1. **The Pheromone Intent:** A no1. **The Pheromone Intent:** A no1. **The Pheromone Intent:** A no1. **The Pheromone Intent:** A no1. **The Phergistry.
-2. **The Conflict:** If another peer is concurrently attempting the exact same setup on that volume, only2. **The Conflict:** If another peer is concurrently attempting the exact same setup on that volume, only2. **The Conflict:** If another peer is concurrently attempting the exact same setup on that volume, only2. **The Conflict:** If another peer is concurrently attempting the exact same setup on that volume, only2. **The Conflict:** If another peer is concurrently attempting the exact same setup on that volume, onl same infrastructure (SOP DB & transactions) used for data storage—keeping the deployment simple, decentralized, and immune to split-brain infrastructure sprawl.
+2. **The Conflict:** If another peer is concurrently attempting the exact same setup on that volume, only2. **The Conflict:** If another peer is concurrently attempting the exact same setup on that volume, only2. **The Conflict:** If another peer is concurrently attempting the exact same setup on that volume, only2. **The Conflict:** If another peer is concurrently attempting the exact same setup on that volume, only2. **The Conflict:** If another peer is concurrently attempting the exact same setup on that volume, onl same infrastructure (SOP DB & transactions) used for data storage - keeping the deployment simple, decentralized, and immune to split-brain infrastructure sprawl.

@@ -142,7 +142,7 @@ An alternative backend for distributed environments that **"Powers up"** your ex
 
 ### Transaction Data Flow
 
-The flow of data during a **Commit** operation is similar for both backends, but the **Commit Point**—the moment the transaction becomes durable—differs.
+The flow of data during a **Commit** operation is similar for both backends, but the **Commit Point** - the moment the transaction becomes durable - differs.
 
 #### `inredcfs` (Hybrid) Flow
 

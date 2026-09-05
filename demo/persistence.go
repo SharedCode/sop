@@ -125,27 +125,37 @@ func opfsRemoveFile(name string) error {
 // state into a single serializable struct. Callers must hold the relevant
 // locks or accept the same eventual-consistency the rest of this demo does.
 func snapshotState() demoSnapshot {
-	db.mu.RLock()
-	ledger := make(map[string]string, 8)
-	for k, v := range db.btree.All() {
-		ledger[k] = v
-	}
-	vectorDocs := make([]VectorDocument, len(db.vectorStore))
-	copy(vectorDocs, db.vectorStore)
-	db.mu.RUnlock()
+	var ledger map[string]string
+	var vectorDocs []VectorDocument
+	func() {
+		db.mu.RLock()
+		defer db.mu.RUnlock()
+		ledger = make(map[string]string, 8)
+		for k, v := range db.btree.All() {
+			ledger[k] = v
+		}
+		vectorDocs = make([]VectorDocument, len(db.vectorStore))
+		copy(vectorDocs, db.vectorStore)
+	}()
 
-	agentEngine.mu.RLock()
-	frames := make(map[string]string, 16)
-	for k, v := range agentEngine.frames.All() {
-		frames[k] = v
-	}
-	sessions := make(map[string]string, 8)
-	for k, v := range agentEngine.sessions.All() {
-		sessions[k] = v
-	}
-	sessionSeq := agentEngine.sessionSeq
-	agentSeq := agentEngine.agentSeq
-	agentEngine.mu.RUnlock()
+	var frames map[string]string
+	var sessions map[string]string
+	var sessionSeq int
+	var agentSeq int
+	func() {
+		agentEngine.mu.RLock()
+		defer agentEngine.mu.RUnlock()
+		frames = make(map[string]string, 16)
+		for k, v := range agentEngine.frames.All() {
+			frames[k] = v
+		}
+		sessions = make(map[string]string, 8)
+		for k, v := range agentEngine.sessions.All() {
+			sessions[k] = v
+		}
+		sessionSeq = agentEngine.sessionSeq
+		agentSeq = agentEngine.agentSeq
+	}()
 
 	return demoSnapshot{
 		Ledger:        ledger,
@@ -161,17 +171,21 @@ func snapshotState() demoSnapshot {
 // B-Trees with the contents of a previously persisted snapshot. Called once,
 // shortly after boot, only if a snapshot was actually found in OPFS.
 func restoreState(snap demoSnapshot) {
-	db.mu.Lock()
-	db.btree = newSeededBtree(snap.Ledger)
-	db.vectorStore = snap.VectorDocs
-	db.mu.Unlock()
+	func() {
+		db.mu.Lock()
+		defer db.mu.Unlock()
+		db.btree = newSeededBtree(snap.Ledger)
+		db.vectorStore = snap.VectorDocs
+	}()
 
-	agentEngine.mu.Lock()
-	agentEngine.frames = newSeededBtree(snap.AgentFrames)
-	agentEngine.sessions = newSeededBtree(snap.AgentSessions)
-	agentEngine.sessionSeq = snap.SessionSeq
-	agentEngine.agentSeq = snap.AgentSeq
-	agentEngine.mu.Unlock()
+	func() {
+		agentEngine.mu.Lock()
+		defer agentEngine.mu.Unlock()
+		agentEngine.frames = newSeededBtree(snap.AgentFrames)
+		agentEngine.sessions = newSeededBtree(snap.AgentSessions)
+		agentEngine.sessionSeq = snap.SessionSeq
+		agentEngine.agentSeq = snap.AgentSeq
+	}()
 }
 
 // persistState serializes the current state and writes it to OPFS in the

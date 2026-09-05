@@ -643,13 +643,15 @@ func (t *Transaction) processScheduledPriorityRollback(ctx context.Context) {
 
 	nextRunTime := sop.Now().Add(time.Duration(-interval) * time.Second).UnixMilli()
 	if t.logger.PriorityLog().IsEnabled() && lastPriorityOnIdleTime < nextRunTime {
-		runTime := false
-		priorityLocker.Lock()
-		if lastPriorityOnIdleTime < nextRunTime {
-			lastPriorityOnIdleTime = sop.Now().UnixMilli()
-			runTime = true
-		}
-		priorityLocker.Unlock()
+		runTime := func() bool {
+			priorityLocker.Lock()
+			defer priorityLocker.Unlock()
+			if lastPriorityOnIdleTime < nextRunTime {
+				lastPriorityOnIdleTime = sop.Now().UnixMilli()
+				return true
+			}
+			return false
+		}()
 		if runTime {
 			log.Info("onIdle: doing scheduled priority rollback check...")
 			// Do the priority rollbacks of aged 5mins & older priority logs.
@@ -676,13 +678,15 @@ func (t *Transaction) processExpiredLogs(ctx context.Context) {
 	}
 	nextRunTime := sop.Now().Add(time.Duration(-interval) * time.Minute).UnixMilli()
 	if lastOnIdleRunTime < nextRunTime {
-		runTime := false
-		locker.Lock()
-		if lastOnIdleRunTime < nextRunTime {
-			lastOnIdleRunTime = sop.Now().UnixMilli()
-			runTime = true
-		}
-		locker.Unlock()
+		runTime := func() bool {
+			locker.Lock()
+			defer locker.Unlock()
+			if lastOnIdleRunTime < nextRunTime {
+				lastOnIdleRunTime = sop.Now().UnixMilli()
+				return true
+			}
+			return false
+		}()
 		if runTime {
 			t.logger.processExpiredTransactionLogs(ctx, t)
 		}

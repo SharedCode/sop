@@ -1,6 +1,6 @@
 package generator
 
-// chatgpt_responses_api.go — OpenAI Responses API transport layer.
+// chatgpt_responses_api.go: OpenAI Responses API transport layer.
 //
 // Responsibilities:
 //   - Sending requests to the Responses API (blocking and streaming).
@@ -232,7 +232,7 @@ func handleChatGPTResponsesStreamEvent(raw string, trackedItems map[string]openA
 }
 
 // ----------------------------------------------------------------------------
-// Response parsing — extract tool calls and assistant text
+// Response parsing: extract tool calls and assistant text
 // ----------------------------------------------------------------------------
 
 // openAIResponseToolCalls returns all function_call items from a response.
@@ -337,7 +337,7 @@ func openAIResponseAssistantMessages(response openAIResponsesResponse) []openAIR
 }
 
 // ----------------------------------------------------------------------------
-// Continuation input — replay prior turn output for stateless multi-turn
+// Continuation input: replay prior turn output for stateless multi-turn
 // ----------------------------------------------------------------------------
 
 // buildChatGPTContinuationInput builds the input items for the next turn.

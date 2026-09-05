@@ -1144,12 +1144,23 @@ func (a *CopilotAgent) handlePendingUserConfirmation(ctx context.Context, query 
 	}
 
 	session := a.service.session
-	session.mu.Lock()
+	var pending *PendingUserConfirmation
+	isAffirmative := isAffirmativeConfirmation(trimmed)
+	isNegative := isNegativeConfirmation(trimmed)
 
-	if pending := session.PendingConfirmation; pending != nil {
-		if isAffirmativeConfirmation(trimmed) {
-			session.PendingConfirmation = nil
-			session.mu.Unlock()
+	func() {
+		session.mu.Lock()
+		defer session.mu.Unlock()
+		if p := session.PendingConfirmation; p != nil {
+			if isAffirmative || isNegative {
+				session.PendingConfirmation = nil
+			}
+			pending = p
+		}
+	}()
+
+	if pending != nil {
+		if isAffirmative {
 			args := map[string]any{"kb_name": pending.SpaceName}
 			if pending.DatabaseName != "" {
 				args["database"] = pending.DatabaseName
@@ -1160,18 +1171,14 @@ func (a *CopilotAgent) handlePendingUserConfirmation(ctx context.Context, query 
 			}
 			return true, res, err
 		}
-		if isNegativeConfirmation(trimmed) {
-			session.PendingConfirmation = nil
-			session.mu.Unlock()
+		if isNegative {
 			return true, fmt.Sprintf("[[CLEAR_PENDING_CONFIRMATION]]\nCancelled deletion of Space '%s'.", pending.SpaceName), nil
 		}
-		session.mu.Unlock()
 		return true, fmt.Sprintf("Pending deletion confirmation for Space '%s'. Reply 'yes' to confirm or 'no' to cancel.", pending.SpaceName), nil
 	}
 
 	spaceName, ok := parseDeleteSpaceRequest(trimmed)
 	if !ok {
-		session.mu.Unlock()
 		return false, "", nil
 	}
 
@@ -1179,12 +1186,17 @@ func (a *CopilotAgent) handlePendingUserConfirmation(ctx context.Context, query 
 	if p := ai.GetSessionPayload(ctx); p != nil {
 		dbName = p.CurrentDB
 	}
-	session.PendingConfirmation = &PendingUserConfirmation{
-		Kind:         "delete_space",
-		SpaceName:    spaceName,
-		DatabaseName: dbName,
-	}
-	session.mu.Unlock()
+
+	func() {
+		session.mu.Lock()
+		defer session.mu.Unlock()
+		session.PendingConfirmation = &PendingUserConfirmation{
+			Kind:         "delete_space",
+			SpaceName:    spaceName,
+			DatabaseName: dbName,
+		}
+	}()
+
 	if dbName != "" {
 		return true, fmt.Sprintf("Delete Space '%s' from database '%s'? Reply 'yes' to confirm or 'no' to cancel.", spaceName, dbName), nil
 	}
@@ -2230,7 +2242,7 @@ func (a *CopilotAgent) resolvePersonaWithMetadata(ctx context.Context) (string, 
 			"You understand that in this platform, a 'Space' or 'Knowledge Base' is a new AI memory subsystem combining VectorDB, Text Search, and a specialized schema (Thoughts: Category/Items), and you manage it differently than raw technical tables. " +
 			"You have deep expertise in SOP scripting (AST-based execution), and the SOP HTTP API, covering request/response lifecycles, NDJSON streaming, and session management. " +
 			"You derive your foundational knowledge, codebase context, and architectural principles directly from the source repository at https://github.com/sharedcode/sop. " +
-			"Assist users dynamically with ANY open-ended request—whether answering general questions, creating and consulting Knowledge Bases, writing code, or managing database queries using the tools provided.\n\n"
+			"Assist users dynamically with ANY open-ended request, whether answering general questions, creating and consulting Knowledge Bases, writing code, or managing database queries using the tools provided.\n\n"
 	}
 
 	persona += "CRITICAL SYSTEM GUARDRAIL:\n" +

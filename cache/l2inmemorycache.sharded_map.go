@@ -42,8 +42,8 @@ func (m *shardedMap) getShard(key string) *shard {
 func (m *shardedMap) load(key string) (any, bool) {
 	shard := m.getShard(key)
 	shard.mu.RLock()
+	defer shard.mu.RUnlock()
 	val, ok := shard.items[key]
-	shard.mu.RUnlock()
 	return val, ok
 }
 
@@ -192,19 +192,15 @@ func (m *shardedMap) compareAndDelete(key string, old any) bool {
 
 func (m *shardedMap) Range(f func(key, value any) bool) {
 	for _, shard := range m.shards {
-		shard.mu.RLock()
-		// Copy items to avoid holding lock during callback if possible,
-		// but Range usually allows concurrent access.
-		// For safety with long-running callbacks, we might want to copy keys.
-		// But standard sync.Map Range holds no locks during callback?
-		// Actually sync.Map Range is complex.
-		// Here we hold RLock. If callback calls Store, it will deadlock.
-		// So we should collect items then callback.
-		items := make(map[string]any, len(shard.items))
-		for k, v := range shard.items {
-			items[k] = v
-		}
-		shard.mu.RUnlock()
+		items := func() map[string]any {
+			shard.mu.RLock()
+			defer shard.mu.RUnlock()
+			res := make(map[string]any, len(shard.items))
+			for k, v := range shard.items {
+				res[k] = v
+			}
+			return res
+		}()
 
 		for k, v := range items {
 			if !f(k, v) {

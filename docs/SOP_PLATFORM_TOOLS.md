@@ -5,9 +5,9 @@
 
 ---
 
-The **SOP Storage Engine & Framework** has long been our standard for General Public Availability (GPA)—iterated, hardened, and running in production environments. It is the reliable bedrock of our data infrastructure.
+The **SOP Storage Engine & Framework** has long been our standard for General Public Availability (GPA) - iterated, hardened, and running in production environments. It is the reliable bedrock of our data infrastructure.
 
-Today, we are proud to announce the official release of the **SOP Platform Tools**—a productivity layer built directly atop this robust engine, now available as a downloadable suite for **Go, C#, Java, Python, and Rust**.
+Today, we are proud to announce the official release of the **SOP Platform Tools** - a productivity layer built directly atop the SOP engine, now available as a downloadable suite for **Go, C#, Java, Python, and Rust**.
 
 Crucially, we are not labeling these tools as "Beta" or "Trial" because they rest on the solid foundation of the SOP Framework. This is a **Major Release** focused entirely on enabling **Productivity**: visualizing data, integrating AI agents, and scripting complex workflows. While the interface and tooling are new, the engine driving every transaction is time-tested and bulletproof.
 
@@ -28,9 +28,9 @@ For the enterprise, this is a showstopper. You cannot build critical infrastruct
 
 With the release of the **SOP Platform Tools**, we are deploying a new paradigm that bridges this gap. We are moving beyond "Chatting with Data" to **"Compiling Intelligence."**
 
-These tools specifically complement the **SOP Storage Engine**—providing advanced visualization and AI capabilities without compromising the engine's inherent stability.
+These tools specifically complement the **SOP Storage Engine** - providing advanced visualization and AI capabilities without compromising the engine's inherent stability.
 
-Crucially, these tools are architected such that they **cannot cause harm** to the underlying SOP Storage Engine. Your data resides in the proven, hardened storage core. The platform tools are **merely visual constructs written atop** the framework—layering AI LLM integration and scripting—while the **SOP Framework** handles the complexity of all storage, transactionality, and distributed coordination.
+Crucially, these tools are architected such that they **cannot cause harm** to the underlying SOP Storage Engine. Your data resides in the proven, hardened storage core. The platform tools are **merely visual constructs written atop** the framework - layering AI LLM integration and scripting - while the **SOP Framework** handles the complexity of all storage, transactionality, and distributed coordination.
 
 ## The Core Innovation: Freezing Reasoning into Code
 
@@ -41,7 +41,7 @@ In traditional RAG (Retrieval-Augmented Generation) systems, the AI answers a qu
 The platform takes a radically different approach. We use the AI not to *perform* the task, but to *write the program* that performs the task.
 
 1.  **Reasoning**: The AI analyzes your intent (e.g., "Find all users in Tokyo who haven't logged in for 30 days and flag them").
-2.  **Compilation**: Instead of just doing it, the AI drafts a **Deterministic Script**—a sequence of explicit, compiled steps (`Scan`, `Filter`, `Update`) using the platform's Swarm Engine.
+2.  **Compilation**: Instead of just doing it, the AI drafts a **Deterministic Script** - a sequence of explicit, compiled steps (`Scan`, `Filter`, `Update`) using the platform's Swarm Engine.
 3.  **Verification**: The system uses a "Nurse/Doctor" agent architecture to validate the script against the schema and safety rules.
 4.  **Execution**: The script runs. It is fast, atomic, and ACID-compliant.
 5.  **The Moat**: **We save the Script.**
@@ -49,7 +49,7 @@ The platform takes a radically different approach. We use the AI not to *perform
 The next time this task is needed, we don't ask the AI to "think" again. We simply run the compiled, verified script. We have effectively **frozen probabilistic reasoning into deterministic software**.
 
 ### Why this is a Game Changer
-This removes the "Hallucination Risk" from the runtime loop. Once a workflow is established, it runs with the precision of a compiled binary. This unlocks **Exponential Automation**—allowing regulated industries (Finance, Healthcare) to finally adopt AI for complex, multi-step write operations, not just read-only summaries.
+This removes the "Hallucination Risk" from the runtime loop. Once a workflow is established, it runs with the precision of a compiled binary. This unlocks **Exponential Automation** - allowing regulated industries (Finance, Healthcare) to finally adopt AI for complex, multi-step write operations, not just read-only summaries.
 
 ## The Infrastructure Innovation: Swarm Computing
 
@@ -66,7 +66,7 @@ The platform collapses this complexity into a **Unified Native Core**.
 
 You cannot have High-Performance Computing without High-Performance I/O.
 
-The platform introduces **Rich Key Structures**. Unlike traditional Key-Value stores that treat keys as dumb strings, the platform allows complex structs to serve as keys. Critical state—like `Version`, `Deleted` flags, or vector `CentroidID`—is stored directly in the B-Tree node, "riding along" with the key.
+The platform introduces **Rich Key Structures**. Unlike traditional Key-Value stores that treat keys as dumb strings, the platform allows complex structs to serve as keys. Critical state - like `Version`, `Deleted` flags, or vector `CentroidID` - is stored directly in the B-Tree node, "riding along" with the key.
 
 This allows the system to scan **billions of records per second** to answer questions like "Count active users" without ever fetching the heavy data payloads from disk. It effectively eliminates the I/O bottleneck that plagues Big Data analytics.
 
@@ -97,7 +97,7 @@ Under the hood, we've exposed powerful new API capabilities that leverage the st
 *   **Complex Filtering:** Support for nested conditions and advanced operators (`$in`, `$gt`, etc.) within the scripting layer.
 *   **Query Explain Plans:** integrated `explain_join` tool to analyze and predict the execution strategy (Index Scan vs Full Scan) for join operations, providing transparency into performance.
 *   **Scripting Engine**: A Turing-complete JSON-based scripting language that allows the creation of complex data pipelines (Filter -> Project -> Join -> Sort) that run close to the data. Use the `POST /api/scripts/execute` endpoint to invoke these scripts from any language (Python, C#, Java, etc.), treating them like server-side Stored Procedures.
-*   **Intermediate Staging (Results Caching)**: Scripts can dynamically create "Temporary B-Trees" (using `open_store` with `create: true, transient: true`) to store the results of multi-stage queries. This allows you to materialize the output of a complex `join`, index it on the fly, and use it as a highly efficient source for subsequent `select` operations—mimicking the "Create Temp Table" pattern in SQL optimization.
+*   **Intermediate Staging (Results Caching)**: Scripts can dynamically create "Temporary B-Trees" (using `open_store` with `create: true, transient: true`) to store the results of multi-stage queries. This allows you to materialize the output of a complex `join`, index it on the fly, and use it as a highly efficient source for subsequent `select` operations - mimicking the "Create Temp Table" pattern in SQL optimization.
 
 #### Example: Optimization with Temporary Stores
 This pattern is useful when you need to perform multiple heavy aggregations (e.g., `SUM`, `COUNT`) on a dataset and then join those results with another table. Instead of running the aggregation twice or doing a nested loop, you materialize it once.
@@ -159,7 +159,7 @@ This ensures that "scratchpad" data never pollutes the long-term storage or leak
 
 SOP is not just a NoSQL store; it is a **progression from the RDBMS**.
 
-For decades, the "Relational Model" has been synonymous with the "SQL Table"—a rigid structure that bundles data storage, indexing, strict Foreign Key enforcement, and Triggers into a single black box. While convenient, these features often attribute to massive slowdowns in modern, high-throughput applications.
+For decades, the "Relational Model" has been synonymous with the "SQL Table" - a rigid structure that bundles data storage, indexing, strict Foreign Key enforcement, and Triggers into a single black box. While convenient, these features often attribute to massive slowdowns in modern, high-throughput applications.
 
 SOP "cuts" the relational model to its core essence, removing the "Table" abstraction to expose the raw power of the **B-Tree**. By decoupling the data structure from the heavy constraints of a traditional RDBMS, we unlock innovations that were previously impossible.
 
@@ -173,11 +173,11 @@ In an RDBMS, the B-Tree is an implementation detail hidden behind the table. In 
 ### 2. Built-in "Software RAID" & Chunking
 Building on top of these structural optimizations, SOP introduces a storage layer designed for massive scale:
 *   **Smart Chunking**: Large values are automatically chunked based on the B-Tree configuration knob.
-*   **Erasure Coding (Software RAID 5/6)**: Redundancy is handled by the software, **striping & redundancy** are achieved optimally together—a feat rarely possible in previous generations. SOP stripes data chunks across drives or nodes with configurable parity, eliminating the need for expensive hardware RAID controllers while providing higher durability than simple replication.
+*   **Erasure Coding (Software RAID 5/6)**: Redundancy is handled by the software, **striping & redundancy** are achieved optimally together - a feat rarely possible in previous generations. SOP stripes data chunks across drives or nodes with configurable parity, eliminating the need for expensive hardware RAID controllers while providing higher durability than simple replication.
 
 This architecture is designed specifically to innovate beyond the mechanical limitations of today's RDBMS and first-generation NoSQL engines.
 
-> **A Hint for Database Vendors**: SOP is built to be the high-performance engine *under* your hood. We invite RDBMS and NoSQL vendors to adopt SOP as their pluggable storage layer. By building on top of SOP, you instantly gain Swarm Intelligence, Erasure Coding, and robust ACID transactions—allowing you to focus on your unique query languages and API features without reinventing the storage wheel.
+> **A Hint for Database Vendors**: SOP is built to be the high-performance engine *under* your hood. We invite RDBMS and NoSQL vendors to adopt SOP as their pluggable storage layer. By building on top of SOP, you instantly gain Swarm Intelligence, Erasure Coding, and strict ACID transactions - allowing you to focus on your unique query languages and API features without reinventing the storage wheel.
 
 ## Deployment Made Simple
 *   **Zero-Config Bundle**: Get started immediately with a pre-configured release bundle containing the Data Manager, Server, and CLI tools.
@@ -196,21 +196,21 @@ Welcome to the era of **Deterministic AI**.
 
 ## SOP "Self-Correcting" AI Copilot Reaches Beta
 
-**January 20, 2026** — We are proud to announce a major milestone for the SOP platform. Today, we are officially moving the **SOP "Self-Correcting" AI Copilot** to **Beta status**. 
+**January 20, 2026**  -  We are proud to announce a major milestone for the SOP platform. Today, we are officially moving the **SOP "Self-Correcting" AI Copilot** to **Beta status**. 
 
-This release is not just a stabilization of existing features—it introduces a fundamental shift in how developers interact with data. We are rebranding our "AI Assistant" to **SOP AI Copilot**, reflecting a leap in capability from a simple helper to a proactive, intelligent partner in your development workflow.
+This release is not just a stabilization of existing features - it introduces a fundamental shift in how developers interact with data. We are rebranding our "AI Assistant" to **SOP AI Copilot**, reflecting a leap in capability from a simple helper to a proactive, intelligent partner in your development workflow.
 
 Here is what defines this new Beta release:
 
 ## 1. The "Self-Correcting" Intelligence
 
-The headline feature of this release is the introduction of a cognitive architecture that mimics human memory. The AI Copilot generally struggled with the "Goldfish Memory" problem—forgetting context as soon as a window closed. We have solved this with a dual-layer memory system:
+The headline feature of this release is the introduction of a cognitive architecture that mimics human memory. The AI Copilot generally struggled with the "Goldfish Memory" problem - forgetting context as soon as a window closed. We have solved this with a dual-layer memory system:
 
 ### Short-Term Memory (Contextual Awareness)
 The Copilot now maintains a robust "Short-Term Memory" within the run-loop of the agent. It tracks the immediate history of your current session, understanding references to previous queries ("filter *that* list by date") and maintaining the state of your current investigation without needing constant restatement of facts.
 
 ### Long-Term Memory (System Knowledge)
-This is the game-changer for Enterprise teams. When you correct the AI Copilot—for example, teaching it that a `status` field uses integers (`1`) instead of strings (`"Active"`)—it doesn't just learn for now; it learns **forever**.
+This is the game-changer for Enterprise teams. When you correct the AI Copilot - for example, teaching it that a `status` field uses integers (`1`) instead of strings (`"Active"`) - it doesn't just learn for now; it learns **forever**.
 *   **ACID-Backed Learning:** These corrections are committed to the `SystemDB` using SOP's transactional B-Trees.
 *   **Shared Intelligence:** If you configure a shared `SystemDB`, a correction made by one developer is instantly available to the entire team. The junior developer's struggle in the morning becomes the senior developer's productivity boost in the afternoon.
 

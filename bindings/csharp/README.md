@@ -182,7 +182,7 @@ await SopServer.RunAsync(args);
 
 *   **Full Data Management**: Perform comprehensive CRUD (Create, Read, Update, Delete) operations on any record directly from the UI. Edit complex JSON objects or binary data with ease.
 *   **High-Performance Search**: Utilizes B-Tree positioning for **instant lookups**, even in datasets with millions of records. Supports both simple keys and complex composite keys (e.g., searching by `Country` + `City` + `Zip`).
-*   **Visual Tree Navigation**: Don't just search—explore. Smart pagination and traversal controls (First, Previous, Next, Last) allow you to walk through your B-Tree structure efficiently.
+*   **Visual Tree Navigation**: Don't just search - explore. Smart pagination and traversal controls (First, Previous, Next, Last) allow you to walk through your B-Tree structure efficiently.
 *   **Bulk Operations**: Designed for rapid-fire management. Delete thousands of records or update batch configurations without writing a single line of code.
 *   **Responsive & Cross-Platform**: A modern, dark-themed UI that works seamlessly across diverse monitor sizes and devices.
 *   **Zero-Config Setup**: The tool automatically downloads the correct optimized binary for your OS/Architecture upon first run. No manual installation required.

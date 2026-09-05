@@ -127,14 +127,18 @@ func (sm *SessionManager) evictLRU() {
 
 // GetOrCreate retrieves the session and its lock, safely resolving races.
 func (sm *SessionManager) GetOrCreate(sessionID string, builder func() ai.Agent[map[string]any]) (ai.Agent[map[string]any], *sync.Mutex) {
-	sm.mu.Lock()
-	if node, ok := sm.lookup[sessionID]; ok {
-		node.lastUse = time.Now()
-		sm.moveToHead(node)
-		sm.mu.Unlock()
-		return node.agent, &node.mutex
+	if ag, mu := func() (ai.Agent[map[string]any], *sync.Mutex) {
+		sm.mu.Lock()
+		defer sm.mu.Unlock()
+		if node, ok := sm.lookup[sessionID]; ok {
+			node.lastUse = time.Now()
+			sm.moveToHead(node)
+			return node.agent, &node.mutex
+		}
+		return nil, nil
+	}(); ag != nil {
+		return ag, mu
 	}
-	sm.mu.Unlock()
 
 	agent := builder()
 

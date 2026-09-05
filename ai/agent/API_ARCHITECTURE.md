@@ -152,13 +152,13 @@ agent.CommitTransaction(ctx, TransactionCommitArgs{TransactionID: tx.ID})
 - **Configuration Editor** - Visual editor for Space settings
 - **Semantic Search UI** - Search interface for testing queries
 
-**Revolutionary Architecture**: SOP is the **only vector database with visual management**—not because of better UI engineering, but because of **fundamentally different architecture**:
+**Revolutionary Architecture**: SOP is the **only vector database with visual management** - not because of better UI engineering, but because of **fundamentally different architecture**:
 
 - **K-means Vector DBs** (Pinecone, Weaviate, Chroma): Use clustering with statistical centroids. Visualization is **architecturally impossible** because centroids are mathematical abstractions, not human-understandable entities.
 
 - **SOP's Spaces** (Relativity-Based): Use Theory of Relativity principles for vector organization. Categories and Items are **first-class entities**, making visualization **inherent** to the design.
 
-**The Lifecycle**: Traditional vector DBs force "Insert → Query". SOP enables **"Mint → Refine → Vectorize"**—build structure first, add content, then vectorize when ready. All visually manageable in KnowledgeBase Studio.
+**The Lifecycle**: Traditional vector DBs force "Insert → Query". SOP enables **"Mint → Refine → Vectorize"** - build structure first, add content, then vectorize when ready. All visually manageable in KnowledgeBase Studio.
 
 **Competitive Edge**: Most platforms provide only API access or basic dashboards. SOP provides a complete visual management suite with AI Copilot integration for natural language queries and code generation.
 

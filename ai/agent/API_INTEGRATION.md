@@ -14,7 +14,7 @@ Before diving into integration, understand SOP's dual-system architecture:
 **Use For**: LLM outputs, embeddings, documents, RAG applications, semantic search  
 **API Files**: `api_space_types.go`, `api_space.go`, `api_space_bulk.go`
 
-**Revolutionary Architecture**: SOP Spaces use **relativity-based architecture** (not K-means clustering like Pinecone/Weaviate), solving the pigeon hole problem and enabling **full visual management** through KnowledgeBase Studio—something architecturally impossible for traditional vector databases.
+**Revolutionary Architecture**: SOP Spaces use **relativity-based architecture** (not K-means clustering like Pinecone/Weaviate), solving the pigeon hole problem and enabling **full visual management** through KnowledgeBase Studio - something architecturally impossible for traditional vector databases.
 
 **SOP is unique** in providing both Stores and Spaces with unified ACID transactions. See [STORES_VS_SPACES.md](STORES_VS_SPACES.md) for architectural comparison.
 

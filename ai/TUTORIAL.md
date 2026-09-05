@@ -167,7 +167,7 @@ func main() {
 
 <h2>Step 5: Long-Term Health (Rebalancing & Self-Healing)</h2>
 
-A Vector Database is a living organism. As you add more knowledge, your initial clusters (Centroids) might become unbalanced—one topic might get too huge while others remain empty.
+A Vector Database is a living organism. As you add more knowledge, your initial clusters (Centroids) might become unbalanced - one topic might get too huge while others remain empty.
 
 SOP includes a built-in **Optimize** feature that uses its self-generated statistics to heal itself.
 
@@ -239,7 +239,7 @@ By default, SOP checks for existing IDs before every insert to ensure data integ
 store.SetDeduplication(false)
 ```
 
-All of these enterprise-grade features—Transactional Integrity, Self-Healing Indexes, and In-Memory Caching—come **for free** just by using the SOP library.
+All of these enterprise-grade features - Transactional Integrity, Self-Healing Indexes, and In-Memory Caching - come **for free** just by using the SOP library.
 
 <h2>Step 7: Zero-Code Agents (JSON Config & ETL)</h2>
 
@@ -383,7 +383,7 @@ go run ai/cmd/demo_doctor/main.go
 *   You type: "I have a bad cough and a runny nose"
 *   The REPL leverages Gemini to embed your query.
 *   It performs Hybrid Search (Vector + BM25) across your local DB.
-*   The RRF engine scores result sets—multiplying and prioritizing matches mathematically bound to your **Active Memory** thread topics.
+*   The RRF engine scores result sets - multiplying and prioritizing matches mathematically bound to your **Active Memory** thread topics.
 *   The agent generates an educated medical diagnostic based on actual vector matches and its system instructions.
 
 <h2>Step 9: The Developer's Toolkit (Go API)</h2>

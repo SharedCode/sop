@@ -55,7 +55,7 @@ For example, imagine our Database is anchored by the System Prompt: `"RBAC, B-Tr
 4. We execute our `$O(\log N)$` B-Tree range scan looking for Category keys between `475` and `525`. 
 5. The B-Tree instantly retrieves the `"best friend"` Category (which sits exactly at `500`), **despite the fact that "best friend", "I love best friend", and "RBAC Databases" share absolutely zero semantic meaning.**
 
-The Anchor doesn't need to understand what it's looking at—it just needs to stubbornly stay still.
+The Anchor doesn't need to understand what it's looking at - it just needs to stubbornly stay still.
 
 ## 4.6. Embedder Contract: Kelindar / nomic-embed-text-v1.5-q8_0
 
@@ -222,7 +222,7 @@ To refine the vector space, the Dynamic Vector Store implements a background "Sl
 * **Deep LLM Reasoning:** Without the strict latency constraints of real-time ingestion API paths, the system provides a larger batch of related thoughts to the LLM and asks it to deduce higher-quality, more globally accurate Categories.
 * **Seamless Re-association:** Thoughts are transitioned to new, optimized Semantic Anchors. Because SOP is fully ACID-transactional, this background reorganization happens safely alongside live user queries and writes without locking or blocking the database.
 * **Evolving Taxonomy:** Just as a human brain refines its understanding of the world overnight, the store taxonomy continuously evolves, heals, and sharpens its semantic layout over time, resulting in progressively higher quality RAG retrieval.
-* **Algorithmic Category Mutation:** Like a person efficiently organizing a physical catalog, the LLM is empowered to algorithmically *mutate* Category Names and Descriptions based on incoming data trends, or shift Categories up and down a hierarchy. By intelligently renaming or broadening a Category in-place, the system requires **zero item movement** and **zero vector recalculation**. Because only the Category metadata is moved or mutated, all underlying Items and their Vector distances remain completely untouched. This drastically reduces VectorDB I/O—the math remains perfectly stable while the semantic umbrella seamlessly adapts to better fit the data.
+* **Algorithmic Category Mutation:** Like a person efficiently organizing a physical catalog, the LLM is empowered to algorithmically *mutate* Category Names and Descriptions based on incoming data trends, or shift Categories up and down a hierarchy. By intelligently renaming or broadening a Category in-place, the system requires **zero item movement** and **zero vector recalculation**. Because only the Category metadata is moved or mutated, all underlying Items and their Vector distances remain completely untouched. This drastically reduces VectorDB I/O - the math remains stable while the semantic umbrella adapts to fit the data directly.
 
 ## 9. Hierarchical Centroids: Massive Fault Tolerance
 One of the most profound advantages of LLM-generated Semantic Anchors is the natural emergence of **Hierarchical Centroids**.
@@ -253,12 +253,12 @@ To accommodate diverse enterprise needs and eliminate expensive generative LLM c
 The Hierarchical Dynamic Vector Architecture: Bringing Billion-Scale Semantic Search to ACID B-Trees
 
 ### Abstract
-For years, the database industry has accepted a fundamental bifurcation: operational data lives in transactional, ACID-compliant B-Trees, while high-dimensional embeddings (vectors) live in specialized approximate nearest neighbor (ANN) graph databases (e.g., Pinecone, Milvus). This split was dictated by the "curse of dimensionality"—the mathematical inability of 1D scalar indexes to efficiently query high-dimensional space. This paper outlines an architectural breakthrough that solves the dimensionality weakness of B-Trees using a Hierarchical Dynamic Vector Architecture. By nesting multi-dimensional semantic clusters inside transactional B-Trees, the system enables pure semantic search executing natively within an ACID-compliant engine.
+For years, the database industry has accepted a fundamental bifurcation: operational data lives in transactional, ACID-compliant B-Trees, while high-dimensional embeddings (vectors) live in specialized approximate nearest neighbor (ANN) graph databases (e.g., Pinecone, Milvus). This split was dictated by the "curse of dimensionality" - the mathematical inability of 1D scalar indexes to efficiently query high-dimensional space. This paper outlines an architectural breakthrough that solves the dimensionality weakness of B-Trees using a Hierarchical Dynamic Vector Architecture. By nesting multi-dimensional semantic clusters inside transactional B-Trees, the system enables pure semantic search executing natively within an ACID-compliant engine.
 
 ### 1. The Legacy Problem: Dimensionality Collapse
 The core reason B-Trees failed at vector search is that a B-Tree inherently sequences data in one dimension (a scalar key). If we attempt to map a 1536-dimensional vector to a B-Tree by calculating its scalar distance from a central origin, we suffer from **Dimensionality Collapse**.
 
-Two entirely unrelated vectors—for example, "Tokyo" and "New York"—might share the exact same mathematical distance from the origin. In the 1D scalar key-space of the B-Tree, these items are adjacent. A naive B-Tree search for a vector similar to "New York" would unnecessarily fetch "Tokyo", leading to massive I/O overhead and false positives. This "opposite sides of the sphere" problem forced the industry to adopt memory-heavy, non-transactional graph algorithms (HNSW).
+Two entirely unrelated vectors - for example, "Tokyo" and "New York" - might share the exact same mathematical distance from the origin. In the 1D scalar key-space of the B-Tree, these items are adjacent. A naive B-Tree search for a vector similar to "New York" would unnecessarily fetch "Tokyo", leading to massive I/O overhead and false positives. This "opposite sides of the sphere" problem forced the industry to adopt memory-heavy, non-transactional graph algorithms (HNSW).
 
 ### 2. The Base Innovation: Multi-Dimensional Semantic Clusters
 The architecture mitigates this weakness not by abandoning the B-Tree, but by introducing a semantic envelope bounded by **Categories**, each functioning as a multi-dimensional centroid.

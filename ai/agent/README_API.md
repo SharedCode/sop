@@ -58,7 +58,7 @@ SOP includes a complete visual management suite with:
 - **AI Copilot**: Natural language queries and code generation
 - **All in one interface**: Environment switching, role-based access
 
-**KnowledgeBase Studio** is the world's only visual vector database management tool—enabled by SOP's relativity-based architecture.
+**KnowledgeBase Studio** is the world's only visual vector database management tool - enabled by SOP's relativity-based architecture.
 
 See [API_ARCHITECTURE.md](API_ARCHITECTURE.md) and [STORES_VS_SPACES.md](STORES_VS_SPACES.md) for detailed architectural comparison.
 

@@ -194,16 +194,15 @@ func (c *L1Cache) getEntryForHandleLocked(handle sop.Handle) (*l1CacheEntry, boo
 
 // GetNodeFromMRU returns the node from L1 if the cached version matches the handle version; otherwise it returns nil.
 func (c *L1Cache) GetNodeFromMRU(handle sop.Handle, nodeTarget any) any {
-	c.locker.Lock()
-	entry, hit := c.getEntryForHandleLocked(handle)
-	var nodeData any
-	if hit {
-		nodeData = entry.nodeData
-	}
-	c.locker.Unlock()
+	entry, hit := func() (*l1CacheEntry, bool) {
+		c.locker.Lock()
+		defer c.locker.Unlock()
+		return c.getEntryForHandleLocked(handle)
+	}()
 	if !hit {
 		return nil
 	}
+	nodeData := entry.nodeData
 	if nodeData == nil {
 		return nodeTarget
 	}
@@ -215,14 +214,13 @@ func (c *L1Cache) GetNodeFromMRU(handle sop.Handle, nodeTarget any) any {
 func (c *L1Cache) GetNode(ctx context.Context, handle sop.Handle, nodeTarget any, isNodeCacheTTL bool, nodeCacheTTLDuration time.Duration) (any, error) {
 	nodeID := handle.GetActiveID()
 
-	c.locker.Lock()
-	entry, hit := c.getEntryForHandleLocked(handle)
-	var nodeData any
+	entry, hit := func() (*l1CacheEntry, bool) {
+		c.locker.Lock()
+		defer c.locker.Unlock()
+		return c.getEntryForHandleLocked(handle)
+	}()
 	if hit {
-		nodeData = entry.nodeData
-	}
-	c.locker.Unlock()
-	if hit {
+		nodeData := entry.nodeData
 		if nodeData == nil {
 			return nodeTarget, nil
 		}
@@ -263,17 +261,19 @@ func (c *L1Cache) DeleteNodes(ctx context.Context, nodesIDs []sop.UUID) (bool, e
 	var lastErr error
 
 	// Delete from MRU if it is there.
-	c.locker.Lock()
-	for _, nodeID := range nodesIDs {
-		if v, ok := c.lookup[nodeID]; ok {
-			c.mru.remove(v.dllNode)
-			v.nodeData = nil
-			v.dllNode = nil
-			delete(c.lookup, nodeID)
-			result = true
+	func() {
+		c.locker.Lock()
+		defer c.locker.Unlock()
+		for _, nodeID := range nodesIDs {
+			if v, ok := c.lookup[nodeID]; ok {
+				c.mru.remove(v.dllNode)
+				v.nodeData = nil
+				v.dllNode = nil
+				delete(c.lookup, nodeID)
+				result = true
+			}
 		}
-	}
-	c.locker.Unlock()
+	}()
 
 	if c.l2CacheNodes == nil {
 		return result, nil
