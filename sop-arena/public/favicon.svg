@@ -1,9 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
-  <rect width="32" height="32" rx="8" fill="#090D15"/>
-  <circle cx="16" cy="16" r="12" stroke="#10B981" stroke-width="2" stroke-dasharray="4 2"/>
-  <circle cx="16" cy="16" r="5" fill="#10B981"/>
-  <circle cx="10" cy="10" r="2.5" fill="#06B6D4"/>
-  <circle cx="22" cy="10" r="2.5" fill="#8B5CF6"/>
-  <circle cx="10" cy="22" r="2.5" fill="#3B82F6"/>
-  <circle cx="22" cy="22" r="2.5" fill="#F59E0B"/>
+  <defs>
+    <linearGradient id="favZ" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00f2fe" />
+      <stop offset="50%" stop-color="#4facfe" />
+      <stop offset="100%" stop-color="#7f00ff" />
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="8" fill="#0b0f19" stroke="url(#favZ)" stroke-width="1.2"/>
+  <path d="M 8.5,8.5 L 23.5,8.5 L 23.5,11.5 L 14.5,20.5 L 23.5,20.5 L 23.5,23.5 L 8.5,23.5 L 8.5,20.5 L 17.5,11.5 L 8.5,11.5 Z" fill="url(#favZ)"/>
 </svg>

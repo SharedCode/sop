@@ -48,21 +48,30 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header className="border-b border-dark-800 bg-dark-950/80 backdrop-blur-md sticky top-0 z-40">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
         
         {/* Brand Logo & Title */}
-        <div className="flex items-center space-x-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-600 via-brand-500 to-accent-cyan flex items-center justify-center font-bold text-black shadow-lg shadow-brand-500/20">
-            <Database className="w-5 h-5 text-black" />
+        <div className="flex items-center space-x-3 flex-shrink-0">
+          <div className="w-9 h-9 rounded-xl bg-[#0b0f19] border border-cyan-400/40 flex items-center justify-center shadow-lg shadow-cyan-500/20 flex-shrink-0">
+            <svg width="22" height="22" viewBox="0 0 100 100">
+              <defs>
+                <linearGradient id="headerZGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#00f2fe" />
+                  <stop offset="45%" stopColor="#4facfe" />
+                  <stop offset="100%" stopColor="#7f00ff" />
+                </linearGradient>
+              </defs>
+              <path d="M 27,27 L 73,27 L 73,37 L 46,63 L 73,63 L 73,73 L 27,73 L 27,63 L 54,37 L 27,37 Z" fill="url(#headerZGrad)"/>
+            </svg>
           </div>
-          <div>
+          <div className="flex-shrink-0">
             <div className="flex items-center space-x-2">
-              <span className="font-extrabold tracking-tight text-white text-lg">ZELTRIN ARENA</span>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-brand-500/10 border border-brand-500/30 text-brand-400 font-mono font-semibold uppercase">
+              <span className="font-extrabold tracking-tight text-white text-base sm:text-lg whitespace-nowrap leading-none">ZELTRIN ARENA</span>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-brand-500/10 border border-brand-500/30 text-brand-400 font-mono font-semibold uppercase whitespace-nowrap hidden sm:inline-block">
                 Interactive Sim
               </span>
             </div>
-            <p className="text-[10px] text-slate-400 font-mono hidden sm:block">
+            <p className="text-[10px] text-slate-400 font-mono hidden md:block whitespace-nowrap mt-0.5">
               Distributed systems survival simulation
             </p>
           </div>
