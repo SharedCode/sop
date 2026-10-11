@@ -130,13 +130,13 @@
     }
 
     const CMDK_COMMANDS = [
-      { label: '🛡️ Verification Barrier', hint: 'section', action: () => location.hash = '#verification-barrier' },
-      { label: '🧠 Durable Memory', hint: 'section', action: () => location.hash = '#durable-memory' },
-      { label: '⚙️ Under the Hood', hint: 'section', action: () => location.hash = '#under-the-hood' },
-      { label: '💳 Pricing', hint: 'section', action: () => location.hash = '#pricing' },
-      { label: '🏢 Enterprise', hint: 'section', action: () => location.hash = '#enterprise' },
-      { label: '🎮 Joltrin Arena', hint: 'go to', action: () => location.href = './arena/' },
-      { label: '🔌 Agent Verification Barrier', hint: 'go to', action: () => location.href = './agents/' },
+      { label: 'Verification Barrier', hint: 'section', action: () => location.hash = '#verification-barrier' },
+      { label: 'Durable Memory', hint: 'section', action: () => location.hash = '#durable-memory' },
+      { label: 'Under the Hood', hint: 'section', action: () => location.hash = '#under-the-hood' },
+      { label: 'Pricing', hint: 'section', action: () => location.hash = '#pricing' },
+      { label: 'Enterprise', hint: 'section', action: () => location.hash = '#enterprise' },
+      { label: 'Joltrin Arena', hint: 'go to', action: () => location.href = './arena/' },
+      { label: 'Agent Verification Barrier', hint: 'go to', action: () => location.href = './agents/' },
       { label: 'GitHub Repository', hint: 'external', action: () => window.open('https://github.com/SharedCode/joltrin', '_blank', 'noopener') },
     ];
     let cmdkFiltered = CMDK_COMMANDS;
@@ -216,6 +216,9 @@
   </script>
 
   <style>
+    @media (prefers-reduced-motion: reduce) {
+      *, ::before, ::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+    }
     body {
       background-color: #07090E;
       color: #E2E8F0;
@@ -290,19 +293,19 @@
       <!-- Funnel Navigation Links -->
       <nav class="hidden lg:flex items-center space-x-1 text-xs font-mono">
         <a href="#verification-barrier" class="px-2.5 py-1 rounded-lg hover:bg-dark-800 text-slate-300 hover:text-brand-400 transition flex items-center space-x-1">
-          <span>🛡️ Barrier</span>
+          <span>Barrier</span>
         </a>
         <a href="#durable-memory" class="px-2.5 py-1 rounded-lg hover:bg-dark-800 text-slate-300 hover:text-brand-400 transition flex items-center space-x-1">
-          <span>🧠 Memory</span>
+          <span>Memory</span>
         </a>
         <a href="#under-the-hood" class="px-2.5 py-1 rounded-lg hover:bg-dark-800 text-slate-300 hover:text-brand-400 transition flex items-center space-x-1">
-          <span>⚙️ Engine</span>
+          <span>Engine</span>
         </a>
         <a href="./arena/" class="px-2.5 py-1 rounded-lg bg-dark-800 hover:bg-dark-700 text-slate-300 border border-dark-700 transition flex items-center space-x-1">
-          <span>🎮 Arena</span>
+          <span>Arena</span>
         </a>
         <a href="./agents/" class="px-2.5 py-1 rounded-lg bg-dark-800 hover:bg-dark-700 text-slate-300 border border-dark-700 transition flex items-center space-x-1">
-          <span>🔌 Agents</span>
+          <span>Agents</span>
         </a>
         <a href="./docs/" class="px-2.5 py-1 rounded-lg hover:bg-dark-800 text-slate-400 hover:text-slate-200 transition">
           <span>Docs</span>
@@ -366,11 +369,11 @@
     <nav id="mobile-menu-panel" class="hidden lg:hidden border-t border-dark-800 bg-dark-900 px-4 py-3 space-y-1 text-sm font-mono">
       <a href="#demo-video" onclick="closeMobileMenu()" class="block px-3 py-2 rounded-lg text-brand-400 hover:text-white hover:bg-dark-800 transition">Watch demo</a>
       <button onclick="closeMobileMenu(); openCommandPalette();" class="block w-full text-left px-3 py-2 rounded-lg text-slate-300 hover:text-white hover:bg-dark-800 transition">🔍 Search</button>
-      <a href="#verification-barrier" onclick="closeMobileMenu()" class="block px-3 py-2 rounded-lg text-slate-300 hover:text-white hover:bg-dark-800 transition">🛡️ Barrier</a>
-      <a href="#durable-memory" onclick="closeMobileMenu()" class="block px-3 py-2 rounded-lg text-slate-300 hover:text-white hover:bg-dark-800 transition">🧠 Memory</a>
-      <a href="#under-the-hood" onclick="closeMobileMenu()" class="block px-3 py-2 rounded-lg text-slate-300 hover:text-white hover:bg-dark-800 transition">⚙️ Engine</a>
-      <a href="./arena/" class="block px-3 py-2 rounded-lg text-slate-300 hover:text-white hover:bg-dark-800 transition">🎮 Arena</a>
-      <a href="./agents/" class="block px-3 py-2 rounded-lg text-slate-300 hover:text-white hover:bg-dark-800 transition">🔌 Agents</a>
+      <a href="#verification-barrier" onclick="closeMobileMenu()" class="block px-3 py-2 rounded-lg text-slate-300 hover:text-white hover:bg-dark-800 transition">Barrier</a>
+      <a href="#durable-memory" onclick="closeMobileMenu()" class="block px-3 py-2 rounded-lg text-slate-300 hover:text-white hover:bg-dark-800 transition">Memory</a>
+      <a href="#under-the-hood" onclick="closeMobileMenu()" class="block px-3 py-2 rounded-lg text-slate-300 hover:text-white hover:bg-dark-800 transition">Engine</a>
+      <a href="./arena/" class="block px-3 py-2 rounded-lg text-slate-300 hover:text-white hover:bg-dark-800 transition">Arena</a>
+      <a href="./agents/" class="block px-3 py-2 rounded-lg text-slate-300 hover:text-white hover:bg-dark-800 transition">Agents</a>
       <a href="./docs/" class="block px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-dark-800 transition">Docs</a>
       <a href="#pricing" onclick="closeMobileMenu()" class="block px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-dark-800 transition">Pricing</a>
       <a href="#enterprise" onclick="closeMobileMenu()" class="block px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-dark-800 transition">Enterprise</a>
@@ -684,10 +687,10 @@ barrier -&gt; ALLOWED</pre>
         <div>
           <h3 class="text-lg font-bold text-white">A block is feedback, not a dead end</h3>
           <p class="text-slate-400 text-sm mt-2 leading-relaxed">
-            When the barrier blocks a step, the agent gets back which rule tripped, the state that is missing, and the steps that would establish it. It can correct course from the block itself instead of guessing or retrying.
+            The result names which rule tripped, the state that is missing and the steps that would establish it, so the agent can replan from the block itself.
           </p>
           <p class="text-slate-400 text-sm mt-2 leading-relaxed">
-            In our runs, Claude agents that were allowed to fix the problem used those fields to take the missing steps and finish, with no identical blocked call repeated. It is a small sample, so the prompts, models, and transcripts are written up in full.
+            In five runs where Claude Opus or Sonnet was allowed to run the other steps, it took the steps the block named and finished, and never repeated a blocked call. Haiku refused the task. That is a small sample, so the prompts, models and transcripts are written up in full.
           </p>
           <a href="https://github.com/SharedCode/joltrin/blob/master/docs/AGENT_BARRIER_TESTS.md#does-the-agent-act-on-the-block-feedback" class="inline-block mt-3 text-sm font-mono text-brand-400 hover:text-brand-300 underline underline-offset-4">Read the agent test results</a>
         </div>
@@ -949,41 +952,41 @@ barrier -&gt; ALLOWED</pre>
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
         <div class="p-5 rounded-xl bg-dark-950 border border-dark-800 space-y-2">
           <div class="text-brand-400 font-mono font-bold text-xs uppercase">1. Durable State</div>
-          <h3 class="font-bold text-white text-sm">Survives Failures &amp; Reboots</h3>
+          <h3 class="font-bold text-white text-sm">Survives restarts</h3>
           <p class="text-xs text-slate-400 leading-relaxed">
-            State is persisted directly to local copy-on-write B-Trees or clustered storage with zero dependency on ephemeral cache processes.
+            State is written to local copy-on-write B-trees or to clustered storage, not to a cache that disappears with the process.
           </p>
         </div>
 
         <div class="p-5 rounded-xl bg-dark-950 border border-dark-800 space-y-2">
           <div class="text-accent-cyan font-mono font-bold text-xs uppercase">2. Checkpoints</div>
-          <h3 class="font-bold text-white text-sm">Atomic Multi-Step Commits</h3>
+          <h3 class="font-bold text-white text-sm">Atomic checkpoints</h3>
           <p class="text-xs text-slate-400 leading-relaxed">
-            Record intermediate reasoning steps atomically. If an agent fails on step 8 of 10, resume from step 7 without restarting the full workflow.
+            Record each step atomically. If an agent fails on step 8 of 10, it resumes from the last committed step, not from the start.
           </p>
         </div>
 
         <div class="p-5 rounded-xl bg-dark-950 border border-dark-800 space-y-2">
           <div class="text-accent-violet font-mono font-bold text-xs uppercase">3. Recovery &amp; Rollback</div>
-          <h3 class="font-bold text-white text-sm">Deterministic Crash Recovery</h3>
+          <h3 class="font-bold text-white text-sm">Rollback on failure</h3>
           <p class="text-xs text-slate-400 leading-relaxed">
-            Strict two-phase commit (2PC) ACID guarantees allow rolling back partially executed state mutations cleanly when unexpected exceptions occur.
+            A transaction that fails before it commits is rolled back, so a half-finished change is not left behind. Commits use two-phase commit.
           </p>
         </div>
 
         <div class="p-5 rounded-xl bg-dark-950 border border-dark-800 space-y-2">
           <div class="text-amber-400 font-mono font-bold text-xs uppercase">4. Vector Similarity</div>
-          <h3 class="font-bold text-white text-sm">Integrated Cosine Embeddings</h3>
+          <h3 class="font-bold text-white text-sm">Vector search</h3>
           <p class="text-xs text-slate-400 leading-relaxed">
-            Recall relevant past agent episodes and facts via high-dimensional vector cosine distance indexed directly in the storage engine.
+            Recall similar past episodes and facts by cosine distance. The index lives in the storage engine.
           </p>
         </div>
 
         <div class="p-5 rounded-xl bg-dark-950 border border-dark-800 space-y-2 sm:col-span-2 lg:col-span-2">
           <div class="text-emerald-400 font-mono font-bold text-xs uppercase">5. Persistent Working Context</div>
-          <h3 class="font-bold text-white text-sm">Zero Server Roundtrips</h3>
+          <h3 class="font-bold text-white text-sm">No network hop</h3>
           <p class="text-xs text-slate-400 leading-relaxed">
-            Runs natively inside your application binary or in-browser via OPFS (Origin Private File System), so reads do not cross a network.
+            Runs inside your application binary, or in the browser on OPFS (Origin Private File System), so reads do not cross a network.
           </p>
         </div>
       </div>
@@ -1000,9 +1003,9 @@ barrier -&gt; ALLOWED</pre>
             <div class="absolute inset-0 rounded-full border-4 border-brand-500 border-t-transparent animate-spin"></div>
             <i data-lucide="cpu" class="w-6 h-6 text-brand-400"></i>
           </div>
-          <h3 class="text-lg font-bold text-white mb-2">Booting Embedded Go WASM Kernel</h3>
+          <h3 class="text-lg font-bold text-white mb-2">Loading the engine</h3>
           <p class="text-sm text-slate-400 text-center max-w-md mb-4 font-mono">
-            Compiling B-Tree transaction log, vector index, and ACID isolation manager into browser memory sandbox...
+            Loading the WebAssembly build. The demos start when it is ready.
           </p>
           <div class="w-64 bg-dark-800 h-1.5 rounded-full overflow-hidden">
             <div class="bg-gradient-to-r from-brand-500 to-accent-cyan h-full w-full animate-pulse"></div>
@@ -1012,13 +1015,13 @@ barrier -&gt; ALLOWED</pre>
       <div class="max-w-3xl mb-6">
         <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-accent-cyan/10 border border-accent-cyan/30 text-accent-cyan text-xs font-mono font-semibold uppercase tracking-wider mb-2">
           <i data-lucide="database" class="w-3.5 h-3.5"></i>
-          <span>Engineering Credibility &amp; Core Engine</span>
+          <span>Core engine</span>
         </div>
         <h2 class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-          Under the Hood: High-Performance Embedded Engine
+          Under the hood: the storage engine
         </h2>
         <p class="text-slate-400 text-xs sm:text-sm mt-1 leading-relaxed">
-          Joltrin isn't just a thin wrapper around an LLM. Underneath the agent layer is a real storage engine: copy-on-write B-trees, write-ahead logging, strict two-phase-commit ACID transactions, and Reed-Solomon erasure coding, compiled to native Go and to WebAssembly so it can run in the browser too.
+          Underneath the agent layer is a storage engine: copy-on-write B-trees, write-ahead logging, two-phase-commit ACID transactions, and Reed-Solomon erasure coding. It compiles to native Go and to WebAssembly, so the demos below run in your browser.
         </p>
       </div>
 
@@ -1531,8 +1534,8 @@ barrier -&gt; ALLOWED</pre>
             </div>
           </div>
 
-          <!-- Row 3: Tier & Company Size -->
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <!-- Row 3: Tier -->
+          <div class="grid grid-cols-1 gap-4">
             <div>
               <label for="inq-tier" class="block text-xs font-mono text-slate-300 mb-1">
                 Tier Interested In <span class="text-rose-400">*</span>
@@ -1545,23 +1548,10 @@ barrier -&gt; ALLOWED</pre>
                 <option value="not_sure">Not sure / Evaluating options</option>
               </select>
             </div>
-            <div>
-              <label for="inq-size" class="block text-xs font-mono text-slate-300 mb-1">
-                Company Size
-              </label>
-              <select id="inq-size" name="company_size"
-                      class="w-full bg-dark-950 border border-dark-700 rounded-lg px-3 py-2 text-xs font-mono text-white focus:border-brand-500 focus:outline-none">
-                <option value="1-10">1 – 10 employees</option>
-                <option value="11-50">11 – 50 employees</option>
-                <option value="51-200" selected>51 – 200 employees</option>
-                <option value="201-1000">201 – 1,000 employees</option>
-                <option value="1000+">1,000+ employees</option>
-              </select>
-            </div>
           </div>
 
-          <!-- Row 4: Primary Use Case & Number of Agents -->
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <!-- Row 4: Primary Use Case -->
+          <div class="grid grid-cols-1 gap-4">
             <div>
               <label for="inq-usecase" class="block text-xs font-mono text-slate-300 mb-1">
                 Primary Use Case <span class="text-rose-400">*</span>
@@ -1576,56 +1566,79 @@ barrier -&gt; ALLOWED</pre>
                 <option value="other">Other Agent Deployment</option>
               </select>
             </div>
-            <div>
-              <label for="inq-agents" class="block text-xs font-mono text-slate-300 mb-1">
-                Approx Number of AI Agents
-              </label>
-              <select id="inq-agents" name="approx_agents"
-                      class="w-full bg-dark-950 border border-dark-700 rounded-lg px-3 py-2 text-xs font-mono text-white focus:border-brand-500 focus:outline-none">
-                <option value="1-5">1 – 5 agents</option>
-                <option value="6-25" selected>6 – 25 agents</option>
-                <option value="26-100">26 – 100 agents</option>
-                <option value="100+">100+ agents</option>
-              </select>
-            </div>
           </div>
 
-          <!-- Conditional Enterprise Fields: IDP & Deployment -->
-          <div id="enterprise-extras" class="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3 bg-dark-950/60 border border-dark-800 rounded-xl">
-            <div>
-              <label for="inq-idp" class="block text-xs font-mono text-slate-300 mb-1">
-                Identity Provider (SSO)
-              </label>
-              <select id="inq-idp" name="idp"
-                      class="w-full bg-dark-900 border border-dark-700 rounded-lg px-3 py-2 text-xs font-mono text-white focus:border-brand-500 focus:outline-none">
-                <option value="okta">Okta (OIDC)</option>
-                <option value="entra_id">Microsoft Entra ID (Azure AD)</option>
-                <option value="other">Other IdP / Custom SAML</option>
-                <option value="none">None / Not required yet</option>
-              </select>
+          <!-- Optional details, collapsed so the first view is five fields -->
+          <details id="inq-more" class="group rounded-xl border border-dark-800 bg-dark-950/40">
+            <summary class="cursor-pointer select-none px-4 py-3 text-xs font-mono text-slate-300 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded-xl">
+              More details (optional)
+            </summary>
+            <div class="space-y-4 p-4 pt-1">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label for="inq-size" class="block text-xs font-mono text-slate-300 mb-1">
+                  Company Size
+                </label>
+                <select id="inq-size" name="company_size"
+                        class="w-full bg-dark-950 border border-dark-700 rounded-lg px-3 py-2 text-xs font-mono text-white focus:border-brand-500 focus:outline-none">
+                  <option value="1-10">1 – 10 employees</option>
+                  <option value="11-50">11 – 50 employees</option>
+                  <option value="51-200" selected>51 – 200 employees</option>
+                  <option value="201-1000">201 – 1,000 employees</option>
+                  <option value="1000+">1,000+ employees</option>
+                </select>
+              </div>
+              <div>
+                <label for="inq-agents" class="block text-xs font-mono text-slate-300 mb-1">
+                  Approx Number of AI Agents
+                </label>
+                <select id="inq-agents" name="approx_agents"
+                        class="w-full bg-dark-950 border border-dark-700 rounded-lg px-3 py-2 text-xs font-mono text-white focus:border-brand-500 focus:outline-none">
+                  <option value="1-5">1 – 5 agents</option>
+                  <option value="6-25" selected>6 – 25 agents</option>
+                  <option value="26-100">26 – 100 agents</option>
+                  <option value="100+">100+ agents</option>
+                </select>
+              </div>
+              </div>
+            <!-- Conditional Enterprise Fields: IDP & Deployment -->
+            <div id="enterprise-extras" class="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3 bg-dark-950/60 border border-dark-800 rounded-xl">
+              <div>
+                <label for="inq-idp" class="block text-xs font-mono text-slate-300 mb-1">
+                  Identity Provider (SSO)
+                </label>
+                <select id="inq-idp" name="idp"
+                        class="w-full bg-dark-900 border border-dark-700 rounded-lg px-3 py-2 text-xs font-mono text-white focus:border-brand-500 focus:outline-none">
+                  <option value="okta">Okta (OIDC)</option>
+                  <option value="entra_id">Microsoft Entra ID (Azure AD)</option>
+                  <option value="other">Other IdP / Custom SAML</option>
+                  <option value="none">None / Not required yet</option>
+                </select>
+              </div>
+              <div>
+                <label for="inq-deploy" class="block text-xs font-mono text-slate-300 mb-1">
+                  Deployment Preference
+                </label>
+                <select id="inq-deploy" name="deployment"
+                        class="w-full bg-dark-900 border border-dark-700 rounded-lg px-3 py-2 text-xs font-mono text-white focus:border-brand-500 focus:outline-none">
+                  <option value="self_hosted" selected>Self-Hosted (Kubernetes / Docker)</option>
+                  <option value="hosted">Interested in Managed Cloud</option>
+                  <option value="hybrid">Hybrid Deployment</option>
+                  <option value="not_sure">Not sure</option>
+                </select>
+              </div>
             </div>
-            <div>
-              <label for="inq-deploy" class="block text-xs font-mono text-slate-300 mb-1">
-                Deployment Preference
-              </label>
-              <select id="inq-deploy" name="deployment"
-                      class="w-full bg-dark-900 border border-dark-700 rounded-lg px-3 py-2 text-xs font-mono text-white focus:border-brand-500 focus:outline-none">
-                <option value="self_hosted" selected>Self-Hosted (Kubernetes / Docker)</option>
-                <option value="hosted">Interested in Managed Cloud</option>
-                <option value="hybrid">Hybrid Deployment</option>
-                <option value="not_sure">Not sure</option>
-              </select>
-            </div>
-          </div>
 
-          <!-- Row 5: Website URL (optional) -->
-          <div>
-            <label for="inq-website" class="block text-xs font-mono text-slate-300 mb-1">
-              Company Website (Optional)
-            </label>
-            <input id="inq-website" name="website" type="url" placeholder="https://example.com"
-                   class="w-full bg-dark-950 border border-dark-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-600 focus:border-brand-500 focus:outline-none" />
-          </div>
+            <!-- Row 5: Website URL (optional) -->
+            <div>
+              <label for="inq-website" class="block text-xs font-mono text-slate-300 mb-1">
+                Company Website (Optional)
+              </label>
+              <input id="inq-website" name="website" type="url" placeholder="https://example.com"
+                     class="w-full bg-dark-950 border border-dark-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-600 focus:border-brand-500 focus:outline-none" />
+            </div>
+            </div>
+          </details>
 
           <!-- Row 6: Requirements Message -->
           <div>
@@ -1644,7 +1657,7 @@ barrier -&gt; ALLOWED</pre>
               <span id="submit-btn-text">Talk to Us</span>
             </button>
             <p class="text-[11px] text-slate-500 text-center font-mono mt-2">
-              🔒 No credit card required. Sensitive payment info is never stored in browser code.
+              No credit card needed. We reply by email.
             </p>
           </div>
 
