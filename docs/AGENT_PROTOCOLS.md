@@ -159,7 +159,9 @@ The built-in `db-maintenance` runbook is only an example. Describe your own step
 "$HOME/.joltrin/bin/sop-mcp-server" setup --apply --runbooks "$PWD/runbooks.json"
 ```
 
-Run `sop-mcp-server check runbooks.json` first to see what the file enforces, or the reason it will not load. Then `sop-mcp-server try runbooks.json deploy deploy_prod run_tests` replays a list of steps against one workflow and prints which the barrier allows, which it blocks and why, and what to run first. It exits 1 if any step is blocked, so it can sit in CI as a test for the runbook. `setup` runs the same check and refuses a file the server could not start with.
+Run `sop-mcp-server check runbooks.json` first to see what the file enforces, or the reason it will not load. `setup` runs the same check and refuses a file the server could not start with.
+
+To test it without an agent, `sop-mcp-server try runbooks.json deploy deploy_prod run_tests` replays a list of steps against one workflow and prints which the barrier allows, which it blocks and why, and what to run first. It exits 1 if any step is blocked, so it can sit in CI as a test for the runbook.
 
 With a file, the server serves exactly those runbooks. It refuses a file with a typo, such as an unknown field or a state that no step establishes, instead of quietly never blocking anything.
 
