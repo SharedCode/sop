@@ -40,6 +40,7 @@ func TestTryBlocksOutOfOrderAndSaysWhatToRunFirst(t *testing.T) {
 
 func TestTryBlockedStepDoesNotAdvanceTheTrace(t *testing.T) {
 	p := writeRunbook(t, goodRunbook)
+	// "deploy" is the workflow name. Both steps are blocked, so nothing is committed to the trace.
 	_, out, _ := try(t, "--json", p, "deploy", "deploy_prod", "get_approval")
 	var res tryResult
 	if err := json.Unmarshal([]byte(out), &res); err != nil {
