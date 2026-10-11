@@ -624,14 +624,19 @@ func (kb *KnowledgeBase[T]) SearchByPath(ctx context.Context, params []PathSearc
 			}
 		}
 
-		ok, _ := itemsTree.Find(ctx, ItemKey{CategoryID: catID, ItemID: sop.NilUUID}, true)
+		ok, err := itemsTree.Find(ctx, ItemKey{CategoryID: catID, ItemID: sop.NilUUID}, true)
+		if err != nil {
+			return nil, err
+		}
 		if !ok {
 			currKey := itemsTree.GetCurrentKey()
 			if !currKey.Key.ItemID.IsNil() {
 				if currKey.Key.CategoryID == catID {
 					ok = true
 				} else if currKey.Key.CategoryID.Compare(catID) < 0 {
-					ok, _ = itemsTree.Next(ctx)
+					if ok, err = itemsTree.Next(ctx); err != nil {
+						return nil, err
+					}
 				}
 			}
 		}
