@@ -116,7 +116,10 @@ func (idx *Index) Add(ctx context.Context, docID string, text string) error {
 		if found, err := idx.termStats.Find(ctx, term, false); err != nil {
 			return err
 		} else if found {
-			count, _ := idx.termStats.GetCurrentValue(ctx)
+			count, err := idx.termStats.GetCurrentValue(ctx)
+			if err != nil {
+				return err
+			}
 			if _, err := idx.termStats.UpdateCurrentValue(ctx, count+1); err != nil {
 				return err
 			}
@@ -130,8 +133,12 @@ func (idx *Index) Add(ctx context.Context, docID string, text string) error {
 	// 4. Update Global Stats
 	// Total Docs
 	totalDocs := 0
-	if found, _ := idx.global.Find(ctx, "total_docs", false); found {
-		totalDocs, _ = idx.global.GetCurrentValue(ctx)
+	if found, err := idx.global.Find(ctx, "total_docs", false); err != nil {
+		return err
+	} else if found {
+		if totalDocs, err = idx.global.GetCurrentValue(ctx); err != nil {
+			return err
+		}
 	}
 	if _, err := idx.global.Upsert(ctx, "total_docs", totalDocs+1); err != nil {
 		return err
@@ -139,8 +146,12 @@ func (idx *Index) Add(ctx context.Context, docID string, text string) error {
 
 	// Total Length (for AvgDL)
 	totalLen := 0
-	if found, _ := idx.global.Find(ctx, "total_len", false); found {
-		totalLen, _ = idx.global.GetCurrentValue(ctx)
+	if found, err := idx.global.Find(ctx, "total_len", false); err != nil {
+		return err
+	} else if found {
+		if totalLen, err = idx.global.GetCurrentValue(ctx); err != nil {
+			return err
+		}
 	}
 	if _, err := idx.global.Upsert(ctx, "total_len", totalLen+docLen); err != nil {
 		return err
@@ -158,8 +169,13 @@ func (idx *Index) Search(ctx context.Context, query string) ([]TextSearchResult,
 
 	// Get Global Stats
 	var N float64 // Total Docs
-	if found, _ := idx.global.Find(ctx, "total_docs", false); found {
-		val, _ := idx.global.GetCurrentValue(ctx)
+	if found, err := idx.global.Find(ctx, "total_docs", false); err != nil {
+		return nil, err
+	} else if found {
+		val, err := idx.global.GetCurrentValue(ctx)
+		if err != nil {
+			return nil, err
+		}
 		N = float64(val)
 	}
 	if N == 0 {
@@ -167,8 +183,13 @@ func (idx *Index) Search(ctx context.Context, query string) ([]TextSearchResult,
 	}
 
 	var totalLen float64
-	if found, _ := idx.global.Find(ctx, "total_len", false); found {
-		val, _ := idx.global.GetCurrentValue(ctx)
+	if found, err := idx.global.Find(ctx, "total_len", false); err != nil {
+		return nil, err
+	} else if found {
+		val, err := idx.global.GetCurrentValue(ctx)
+		if err != nil {
+			return nil, err
+		}
 		totalLen = float64(val)
 	}
 	avgDL := totalLen / N
@@ -183,8 +204,13 @@ func (idx *Index) Search(ctx context.Context, query string) ([]TextSearchResult,
 	for _, term := range tokens {
 		// Get Term Stats (n_q)
 		var nq float64
-		if found, _ := idx.termStats.Find(ctx, term, false); found {
-			val, _ := idx.termStats.GetCurrentValue(ctx)
+		if found, err := idx.termStats.Find(ctx, term, false); err != nil {
+			return nil, err
+		} else if found {
+			val, err := idx.termStats.GetCurrentValue(ctx)
+			if err != nil {
+				return nil, err
+			}
 			nq = float64(val)
 		} else {
 			continue // Term not found
@@ -237,8 +263,13 @@ func (idx *Index) Search(ctx context.Context, query string) ([]TextSearchResult,
 
 			// Need DocLen
 			var docLen float64
-			if found, _ := idx.docStats.Find(ctx, docID, false); found {
-				val, _ := idx.docStats.GetCurrentValue(ctx)
+			if found, err := idx.docStats.Find(ctx, docID, false); err != nil {
+				return nil, err
+			} else if found {
+				val, err := idx.docStats.GetCurrentValue(ctx)
+				if err != nil {
+					return nil, err
+				}
 				docLen = float64(val)
 			} else {
 				docLen = avgDL // Fallback

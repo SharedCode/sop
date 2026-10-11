@@ -213,13 +213,17 @@ func (a *CopilotAgent) toolSelect(ctx context.Context, args map[string]any) (str
 
 			if isDesc {
 				// Use the new optimized FindInDescendingOrder
-				_, err = store.FindInDescendingOrder(ctx, startKey)
+				if _, err = store.FindInDescendingOrder(ctx, startKey); err != nil {
+					return "", fmt.Errorf("failed to position cursor: %w", err)
+				}
 				k := store.GetCurrentKey()
 				if k != nil {
 					ok = true
 				}
 			} else {
-				_, err = store.FindOne(ctx, startKey, true)
+				if _, err = store.FindOne(ctx, startKey, true); err != nil {
+					return "", fmt.Errorf("failed to position cursor: %w", err)
+				}
 				k := store.GetCurrentKey()
 				if k != nil {
 					ok = true
@@ -231,12 +235,18 @@ func (a *CopilotAgent) toolSelect(ctx context.Context, args map[string]any) (str
 			} else {
 				ok, err = store.First(ctx)
 			}
+			if err != nil {
+				return "", fmt.Errorf("failed to position cursor: %w", err)
+			}
 		}
 	} else {
 		if isDesc {
-			ok, _ = store.Last(ctx)
+			ok, err = store.Last(ctx)
 		} else {
-			ok, _ = store.First(ctx)
+			ok, err = store.First(ctx)
+		}
+		if err != nil {
+			return "", fmt.Errorf("failed to position cursor: %w", err)
 		}
 	}
 
