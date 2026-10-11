@@ -1,6 +1,6 @@
 module github.com/sharedcode/joltrin/search
 
-go 1.26.8
+go 1.26.9
 
 require (
 	github.com/sharedcode/joltrin/infs v0.1.0
