@@ -10,6 +10,10 @@
 - The runbook loader refuses more mistakes: a second JSON document after the first, two safety rules with the same name, a step that requires a state only that step establishes, and a file over 4 MB, which used to fail with "unexpected EOF".
 - The block log keeps recording when another server process compacts the shared file, which used to send its writes to a deleted file. A compaction that cannot be done, which Windows refuses while another process holds the file, no longer stops the server starting, and the server says so at startup.
 - The homepage, the docs landing page and the README now lead with independent verification of agent actions. The homepage loads about twice as fast, the download names in the getting-started docs are fixed, and the quickstart commands no longer need a clone.
+- `sop-mcp-server try runbooks.json WORKFLOW STEP...` replays a list of steps against a runbook in one fresh run and prints which the barrier allows, which it blocks and why, and what to run first. It exits 1 if any step is blocked, so it can test a runbook in CI.
+- Store errors were dropped in three places and are now returned: cursor positioning in the agent select tools, `SearchByPath` in the knowledge base, and the term, global and document stats lookups in the search index.
+- Go is bumped to 1.26.9 and 1.27.2 and `golang.org/x/net` to 0.60.0, which clears the govulncheck and Trivy findings. Dependabot updates to the CI actions and `goccy/go-json` 0.11.2 are included.
+- The agents page and the homepage drop claims the repository does not back, collapse the optional form fields, respect reduced motion, and no longer use emoji in the navigation.
 
 ## v5.10.0
 
