@@ -161,6 +161,8 @@ The built-in `db-maintenance` runbook is only an example. Describe your own step
 
 Run `sop-mcp-server check runbooks.json` first to see what the file enforces, or the reason it will not load. `setup` runs the same check and refuses a file the server could not start with.
 
+To test it without an agent, `sop-mcp-server try runbooks.json deploy deploy_prod run_tests` replays a list of steps against one workflow and prints which the barrier allows, which it blocks and why, and what to run first. It exits 1 if any step is blocked, so it can sit in CI as a test for the runbook.
+
 With a file, the server serves exactly those runbooks. It refuses a file with a typo, such as an unknown field or a state that no step establishes, instead of quietly never blocking anything.
 
 What this catches: an agent that skips a required step, breaks a safety rule, or names a step that does not exist. What it does not do: judge whether an agent's own claim is true. That needs evidence from a tool the agent cannot fake, so it is not something a runbook file can add.
@@ -174,6 +176,7 @@ What this catches: an agent that skips a required step, breaks a safety rule, or
 | `sop-mcp-server` (or `stdio`, `serve`) | Serve the barrier over MCP on stdin and stdout. |
 | `sop-mcp-server setup [--apply] [--lessons DIR] [--runbooks FILE]` | Print, or with `--apply` run, the commands that register the server with Claude Code, Codex and the Gemini CLI by its full path. It can be run again. A runbook file that does not load is refused. |
 | `sop-mcp-server check [--json] FILE` | Load a runbook file and show what it enforces, or why it does not load. `--json` prints one JSON document, including the error when the file is invalid. |
+| `sop-mcp-server try [--json] FILE WORKFLOW STEP...` | Replay steps in order against a runbook, in one fresh run, and show which are allowed or blocked. A blocked step changes nothing and the replay goes on. Exit 0 if all are allowed, 1 if any is blocked, 2 for an unknown workflow or step. |
 | `sop-mcp-server demo [--json]` | Watch the barrier block a database drop until a backup is validated. It needs no agent. `--json` prints each decision. |
 | `sop-mcp-server version` | Print the version. A published binary reports its release tag, and a build from a working copy reports `dev`. |
 | `sop-mcp-server help` | Print the commands. |

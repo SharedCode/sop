@@ -13,6 +13,8 @@ Usage:
   sop-mcp-server setup [--apply]       register it with Claude Code, Codex and the Gemini CLI
                        [--lessons DIR] [--runbooks FILE]
   sop-mcp-server check [--json] FILE   show what a runbook file enforces, or why it does not load
+  sop-mcp-server try [--json] FILE WORKFLOW STEP...
+                                       replay steps against a runbook and see which the barrier blocks
   sop-mcp-server demo [--json]         watch the barrier block a database drop until a backup is validated
   sop-mcp-server version               print the version
   sop-mcp-server help                  print this text
@@ -55,6 +57,8 @@ func dispatch(args []string, out, errw io.Writer) (code int, serve bool) {
 		return setupMain(args[1:], out, errw), false
 	case "check":
 		return runCheck(args[1:], out, errw), false
+	case "try":
+		return runTry(args[1:], out, errw), false
 	case "demo":
 		return runDemoArgs(args[1:], out, errw), false
 	}
