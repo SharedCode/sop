@@ -1,5 +1,9 @@
 # Changelog
 
+## v5.11.1
+
+- The release build for the Linux and Windows libraries pinned Go 1.26.8 and failed against the Go 1.26.9 requirement, so the v5.11.0 packages were not built. This release fixes the pin. It carries everything listed under v5.11.0.
+
 ## v5.11.0
 
 - A blocked `execute_step` result now says why the check exists (`why`: what it protects, built from the runbook, also in the A2A `input-required` message). With memory on it also carries `lesson`, what earlier runs learned about the same block, read before the current block is recorded so it only covers earlier runs.
