@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"net"
 	"os"
 	"os/signal"
@@ -48,7 +49,7 @@ func run(ctx context.Context, args []string, stderr io.Writer) error {
 	case *keyFile == "":
 		return errors.New("--tls-key is required")
 	}
-	gate, err := k8sgate.FromFiles(k8sgate.Files{Runbooks: *runbooks, Policy: *policy, CommitTokenFile: *tokenFile, WarnOnly: *warnOnly})
+	gate, err := k8sgate.FromFiles(k8sgate.Files{Runbooks: *runbooks, Policy: *policy, CommitTokenFile: *tokenFile, WarnOnly: *warnOnly, Logger: slog.New(slog.NewJSONHandler(stderr, nil))})
 	if err != nil {
 		return err
 	}

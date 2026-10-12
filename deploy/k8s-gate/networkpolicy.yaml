@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: joltrin-gate
+  namespace: joltrin-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: joltrin-gate
+  policyTypes: [Ingress, Egress]
+  # The gate only answers admission calls and scrapes, and reads its runbooks
+  # and policy from mounted files, so it needs no outbound traffic at all.
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 8443
+  egress: []
