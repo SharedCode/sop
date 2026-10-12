@@ -18,6 +18,8 @@ on push to `master`; this doc covers what it provisions and how to run it by han
 
 ## Why pinned to 1 replica, and no Redis
 
+There is no autoscaling. The app has an HTTP concurrency rule (50 concurrent requests), but the maximum replica count is 1, so that rule can never add a replica. It only sets how many requests the ingress queues against the single instance. Scaling out needs the billing store to be safe for several writers first.
+
 joltrin's embedded B-Tree engine has no documented guarantee of safe
 concurrent multi-process writes to the same data path. It does ship a
 Redis-backed distributed-locking `L2Cache` (`adapters/redis`) that would make
@@ -74,7 +76,7 @@ az containerapp update -n joltrin-app -g joltrin-prod-rg --image <registry>.azur
 - One replica, so a restart or deploy can cause a short outage, and there is no high availability.
 - The rate limit identifies a caller by the rightmost `X-Forwarded-For` entry, which is the one Container Apps supplies and documents as the only trusted one (IPv6 grouped by /64). That is only correct behind that ingress. If the server were exposed directly, a client could set that entry too.
 - I found no throttling on `/api/auth/login`. The root account needs a password of at least 16 characters.
-- No uptime history, no SLO, and no alert has been exercised.
+- Uptime history starts when `.github/workflows/uptime.yml` begins running, and there is no SLO. One alert path was exercised on purpose (see `docs/INCIDENTS.md`), and the five real alerts have not fired.
 - Rollback and restore have not been rehearsed, and the file share's snapshot policy has not been checked.
 - The billing store is single writer, which is why the app is pinned to one replica.
 
