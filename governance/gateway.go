@@ -86,9 +86,24 @@ type bucket struct {
 
 // TierRateLimiter enforces tier-differentiated token bucket rate limits per tenant.
 type TierRateLimiter struct {
-	mu      sync.Mutex
-	buckets map[string]*bucket
+	mu        sync.Mutex
+	buckets   map[string]*bucket
+	lastSweep time.Time
 }
+
+const (
+	// maxBuckets bounds the limiter's memory. Keys can come from callers who
+	// have not signed in, so without a bound a stream of new keys would grow
+	// the map until the process ran out of memory.
+	maxBuckets = 50000
+	// bucketIdleTTL is how long a bucket can sit unused before it is dropped.
+	// The slowest tier refills a full bucket in about two seconds, so a bucket
+	// idle for a minute is full and dropping it loses nothing.
+	bucketIdleTTL = time.Minute
+	// overflowKey is the shared bucket new keys fall into when the map is
+	// full of recently used ones. During a flood they share one limit.
+	overflowKey = "\x00overflow"
+)
 
 // NewTierRateLimiter constructs a TierRateLimiter.
 func NewTierRateLimiter() *TierRateLimiter {
@@ -97,10 +112,33 @@ func NewTierRateLimiter() *TierRateLimiter {
 	}
 }
 
+// sweepLocked drops buckets that have been idle for bucketIdleTTL. It runs at
+// most every ten seconds, and only when the map is full.
+func (rl *TierRateLimiter) sweepLocked(now time.Time) {
+	if now.Sub(rl.lastSweep) < 10*time.Second {
+		return
+	}
+	rl.lastSweep = now
+	for k, b := range rl.buckets {
+		if now.Sub(b.lastRefill) > bucketIdleTTL {
+			delete(rl.buckets, k)
+		}
+	}
+}
+
 func (rl *TierRateLimiter) getBucketLocked(tenantID string, tier Tier) *bucket {
 	b, ok := rl.buckets[tenantID]
 	if ok {
 		return b
+	}
+	if len(rl.buckets) >= maxBuckets {
+		rl.sweepLocked(time.Now())
+		if len(rl.buckets) >= maxBuckets {
+			tenantID = overflowKey
+			if b, ok := rl.buckets[tenantID]; ok {
+				return b
+			}
+		}
 	}
 
 	rate := 10.0

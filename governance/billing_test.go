@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -215,5 +216,71 @@ func TestDefaultBillingService_EnterpriseInquiry(t *testing.T) {
 	}
 	if list[0].Email != "jane@enterprise-corp.com" {
 		t.Errorf("expected jane@enterprise-corp.com, got %s", list[0].Email)
+	}
+}
+
+func TestSubmitEnterpriseInquiry_IgnoresWhatTheCallerSetsForIDStatusAndTime(t *testing.T) {
+	svc := NewDefaultBillingService(StripeConfig{Simulate: true}, nil)
+	first := &EnterpriseInquiry{ID: "inq_victim", Status: "qualified", Email: "a@example.com"}
+
+	saved, err := svc.SubmitEnterpriseInquiry(context.Background(), first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.ID == "inq_victim" || saved.Status != "new" || saved.CreatedAt.IsZero() {
+		t.Errorf("caller fields must be replaced: %+v", saved)
+	}
+	if first.ID != "inq_victim" || first.Status != "qualified" {
+		t.Error("the caller's struct must not be modified")
+	}
+
+	// A second submission naming the same ID cannot replace the first one.
+	if _, err := svc.SubmitEnterpriseInquiry(context.Background(), &EnterpriseInquiry{ID: saved.ID, Email: "b@example.com"}); err != nil {
+		t.Fatal(err)
+	}
+	list, _ := svc.ListEnterpriseInquiries(context.Background())
+	if len(list) != 2 {
+		t.Errorf("both inquiries must be kept, got %d", len(list))
+	}
+}
+
+func TestSubmitEnterpriseInquiry_Validation(t *testing.T) {
+	long := func(n int) string { return strings.Repeat("x", n) }
+	cases := map[string]EnterpriseInquiry{
+		"no email":           {},
+		"not an email":       {Email: "not-an-email"},
+		"display name":       {Email: "Jane <jane@example.com>"},
+		"email too long":     {Email: long(250) + "@e.co"},
+		"name too long":      {Email: "a@example.com", Name: long(201)},
+		"company too long":   {Email: "a@example.com", Company: long(201)},
+		"message too long":   {Email: "a@example.com", Message: long(5001)},
+		"use cases too long": {Email: "a@example.com", UseCases: long(5001)},
+	}
+	svc := NewDefaultBillingService(StripeConfig{Simulate: true}, nil)
+	for name, inq := range cases {
+		inq := inq
+		if _, err := svc.SubmitEnterpriseInquiry(context.Background(), &inq); !errors.Is(err, ErrInvalidInquiry) {
+			t.Errorf("%s: got %v, want ErrInvalidInquiry", name, err)
+		}
+	}
+	if _, err := svc.SubmitEnterpriseInquiry(context.Background(), nil); !errors.Is(err, ErrInvalidInquiry) {
+		t.Errorf("nil: got %v", err)
+	}
+
+	ok := EnterpriseInquiry{Email: "a@example.com", Name: long(200), Message: long(5000)}
+	if _, err := svc.SubmitEnterpriseInquiry(context.Background(), &ok); err != nil {
+		t.Errorf("fields at the limit must be accepted: %v", err)
+	}
+}
+
+func TestSubmitEnterpriseInquiry_StopsAtTheCap(t *testing.T) {
+	svc := NewDefaultBillingService(StripeConfig{Simulate: true}, nil)
+	for i := 0; i < maxStoredInquiries; i++ {
+		if _, err := svc.SubmitEnterpriseInquiry(context.Background(), &EnterpriseInquiry{Email: "a@example.com"}); err != nil {
+			t.Fatalf("inquiry %d: %v", i, err)
+		}
+	}
+	if _, err := svc.SubmitEnterpriseInquiry(context.Background(), &EnterpriseInquiry{Email: "a@example.com"}); !errors.Is(err, ErrInquiryLimit) {
+		t.Errorf("past the cap: got %v, want ErrInquiryLimit", err)
 	}
 }

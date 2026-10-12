@@ -12,7 +12,7 @@ on push to `master`; this doc covers what it provisions and how to run it by han
 - **Key Vault** (RBAC-authorized) holding the Stripe secret key, webhook secret, and publishable key
 - **Log Analytics workspace** (30-day retention, caps ingestion cost)
 - **Container Apps environment** wired to that workspace
-- **Container App**, pinned to `minReplicas = maxReplicas = 1` (see the comment in `modules/container-app.bicep` for why), 0.5 vCPU / 1Gi, liveness/readiness/startup probes on `/api/health`
+- **Container App**, pinned to `minReplicas = maxReplicas = 1` (see the comment in `modules/container-app.bicep` for why), 0.5 vCPU / 1Gi, liveness and startup probes on `/api/health`, readiness probe on `/api/ready`
 - **Cost budget** with alerts at 50/75/90/100% of a monthly USD threshold
 - **Azure Monitor metric alerts** (CPU%, memory%, restart-loop, no running replica, burst of 5xx responses) on the Container App, wired to an email action group. The app also serves Prometheus metrics at `/metrics`, including a request duration histogram
 
@@ -32,6 +32,51 @@ Both are real, billed Azure resources (ingestion + workspace cost) that a
 single-replica, personal-scale deployment doesn't need. Native platform
 metric alerts on the Container App resource cost a few cents/month per rule
 and cover the same guardrails (CPU, memory, restart loops).
+
+## Operating the deployed service
+
+This describes the code on `master`, so a reviewer can check each statement against it. A change reaches the running service only after the deploy workflow is approved, so the live service can be behind this text.
+
+**What it is.** One Go binary, `tools/httpserver`, behind the Container Apps ingress (TLS only). It serves the Data Manager UI and the billing routes the site uses. The agent verification barrier is a different program and is not part of this deployment.
+
+**Request path.** Ingress, then `net/http` with these layers in order: metrics, security headers, a 10 MiB body cap, then the handlers. Billing state (subscriptions, processed Stripe event ids, enterprise inquiries) is stored in Joltrin's own embedded store under `<database>/_billing`, on the Azure Files share mounted at the data path.
+
+**Public and protected routes.**
+
+- Public: the root page and `/login`, the sign-in routes under `/api/auth/` (login, refresh, provider list, OIDC), `/api/health`, `/api/ready`, `/metrics`, `/api/billing/public-checkout` (CORS limited to the marketing site, rate limited, 4 KiB body), `/api/billing/enterprise-contact` (CORS limited to the marketing site, rate limited, 16 KiB body, bounded fields, at most 10,000 stored), and `/api/billing/webhook` (Stripe signature checked, events deduplicated, 1 MiB body).
+- `/api/billing/checkout/simulate` answers 404 unless Stripe is in simulation mode, so it cannot grant a paid tier with live keys.
+- The other registered routes are wrapped in the sign-in check (`withAuth`).
+- `/metrics` is open unless `JOLTRIN_METRICS_TOKEN` is set, in which case it needs `Authorization: Bearer <token>`.
+
+**Configuration and secrets.** Stripe keys and the root password come from Key Vault through the app's managed identity. Other settings are flags and environment variables, listed in `modules/container-app.bicep`. No secret is in the repository.
+
+**Health.** `/api/health` is liveness only and always answers 200 while the process runs. `/api/ready` answers 503 while the process is shutting down or when the data directory is missing, so a lost file share takes the instance out of rotation without a restart loop. Startup also uses `/api/health`.
+
+**Shutdown.** On SIGTERM the server marks itself not ready, waits 5 seconds, then gives requests in flight up to 20 seconds to finish. Container Apps allows 30. A listen failure exits non-zero.
+
+**Metrics.** `/metrics` has request totals by status class, in-flight requests, a latency histogram, goroutines and heap. Health, readiness and `/metrics` requests are counted separately as `sop_http_probe_requests_total` and are left out of the request totals and the histogram, so those numbers describe real requests.
+
+**Alerts.** Azure Monitor alerts for CPU, memory, restart loops, no running replica and bursts of 5xx responses, sent to one email address. None of them has been seen to fire.
+
+**Deploying.** A push to `master` that touches this folder, `tools/httpserver`, `governance` or the Dockerfile runs `deploy-azure.yml`: infrastructure, then build, scan and push, then a roll to the new image that waits for approval on the `production` environment. Between the infrastructure step and the approval, the previous revision keeps serving. That was seen once, when a run waited about 15 hours at the gate.
+
+**Rolling back (not rehearsed).** The registry keeps one tag per build, in the form `<version>-<commit>`. Pointing the app at an earlier tag should roll it back:
+
+```bash
+az containerapp revision list -n joltrin-app -g joltrin-prod-rg -o table
+az containerapp update -n joltrin-app -g joltrin-prod-rg --image <registry>.azurecr.io/joltrin:<earlier-tag>
+```
+
+**Troubleshooting.** Not ready: check that the file share is mounted (`/api/ready` says `data_unavailable`). 429 responses on billing routes: the per-client limit is working. Restart loop: `az containerapp logs show -n joltrin-app -g joltrin-prod-rg --tail 100`.
+
+**Known limits.**
+
+- One replica, so a restart or deploy can cause a short outage, and there is no high availability.
+- The rate limit identifies a caller by the rightmost `X-Forwarded-For` entry, which is the one Container Apps supplies and documents as the only trusted one (IPv6 grouped by /64). That is only correct behind that ingress. If the server were exposed directly, a client could set that entry too.
+- I found no throttling on `/api/auth/login`. The root account needs a password of at least 16 characters.
+- No uptime history, no SLO, and no alert has been exercised.
+- Rollback and restore have not been rehearsed, and the file share's snapshot policy has not been checked.
+- The billing store is single writer, which is why the app is pinned to one replica.
 
 ## Deploying by hand
 

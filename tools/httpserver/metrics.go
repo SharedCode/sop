@@ -1,9 +1,12 @@
 package main
 
 import (
+	"crypto/sha256"
+	"crypto/subtle"
 	"fmt"
 	log "log/slog"
 	"net/http"
+	"os"
 	"runtime"
 	"sync/atomic"
 	"time"
@@ -22,6 +25,10 @@ type serverMetrics struct {
 	responses4xx atomic.Int64
 	responses5xx atomic.Int64
 	inFlight     atomic.Int64
+	// probeRequests counts health, readiness and metrics scrapes. They are
+	// kept out of the request counters and the latency histogram so the
+	// numbers describe real requests, not the platform's own checks.
+	probeRequests atomic.Int64
 
 	// Request duration histogram. Each bucket counts requests at or under its
 	// bound, as Prometheus expects. Long-lived streaming requests land in the
@@ -53,8 +60,22 @@ func (r *statusRecorder) Flush() {
 	}
 }
 
+// isProbePath reports whether a request is an infrastructure check.
+func isProbePath(path string) bool {
+	switch path {
+	case "/api/health", "/api/ready", "/metrics":
+		return true
+	}
+	return false
+}
+
 func metricsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isProbePath(r.URL.Path) {
+			metrics.probeRequests.Add(1)
+			next.ServeHTTP(w, r)
+			return
+		}
 		metrics.requests.Add(1)
 		metrics.inFlight.Add(1)
 		defer metrics.inFlight.Add(-1)
@@ -90,7 +111,25 @@ func metricsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// metricsAuthorized lets a request through when JOLTRIN_METRICS_TOKEN is not
+// set, which is the default, so existing scrapers keep working. When it is
+// set, the request must carry it as a bearer token.
+func metricsAuthorized(r *http.Request) bool {
+	token := os.Getenv("JOLTRIN_METRICS_TOKEN")
+	if token == "" {
+		return true
+	}
+	want := sha256.Sum256([]byte("Bearer " + token))
+	got := sha256.Sum256([]byte(r.Header.Get("Authorization")))
+	return subtle.ConstantTimeCompare(want[:], got[:]) == 1
+}
+
 func handleMetrics(w http.ResponseWriter, r *http.Request) {
+	if !metricsAuthorized(r) {
+		w.Header().Set("WWW-Authenticate", "Bearer")
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
 	var mem runtime.MemStats
 	runtime.ReadMemStats(&mem)
 
@@ -98,6 +137,7 @@ func handleMetrics(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "# HELP sop_build_info Build information.\n# TYPE sop_build_info gauge\nsop_build_info{version=%q} 1\n", sop.Version)
 	fmt.Fprintf(w, "# HELP sop_uptime_seconds Seconds since the server started.\n# TYPE sop_uptime_seconds gauge\nsop_uptime_seconds %d\n", int64(time.Since(metrics.started).Seconds()))
 	fmt.Fprintf(w, "# HELP sop_http_requests_total Total HTTP requests received.\n# TYPE sop_http_requests_total counter\nsop_http_requests_total %d\n", metrics.requests.Load())
+	fmt.Fprintf(w, "# HELP sop_http_probe_requests_total Health, readiness and metrics requests, not counted in the request totals.\n# TYPE sop_http_probe_requests_total counter\nsop_http_probe_requests_total %d\n", metrics.probeRequests.Load())
 	fmt.Fprintf(w, "# HELP sop_http_responses_total HTTP responses by status class.\n# TYPE sop_http_responses_total counter\n")
 	fmt.Fprintf(w, "sop_http_responses_total{class=\"2xx\"} %d\n", metrics.responses2xx.Load())
 	fmt.Fprintf(w, "sop_http_responses_total{class=\"3xx\"} %d\n", metrics.responses3xx.Load())

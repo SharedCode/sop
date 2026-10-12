@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	log "log/slog"
+	"net"
 	"net/http"
 	"net/mail"
 	"os"
@@ -35,17 +37,39 @@ func getBillingRateLimiter() *governance.TierRateLimiter {
 	return billingRateLimiter
 }
 
-// clientIPKey extracts a best-effort client identifier for rate limiting.
-// Azure Container Apps' ingress sets X-Forwarded-For; RemoteAddr is the
-// fallback for direct/local connections.
+// clientIPKey identifies the caller for rate limiting. Behind Azure Container
+// Apps the ingress appends the real client address as the rightmost
+// X-Forwarded-For entry, and its documentation says every earlier entry is
+// untrusted because a client can send its own. So only the rightmost entry
+// of the last header line is used. IPv6 addresses are grouped by /64, so a
+// client that owns a whole prefix cannot get a fresh bucket per address.
+// With no usable header it falls back to the connection's address, without
+// the port, which changes on every connection.
+//
+// This is only right behind that ingress. If the server were exposed directly,
+// a client could set the rightmost entry too.
 func clientIPKey(r *http.Request) string {
-	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
-		if idx := strings.Index(fwd, ","); idx != -1 {
-			return strings.TrimSpace(fwd[:idx])
+	if lines := r.Header.Values("X-Forwarded-For"); len(lines) > 0 {
+		entries := strings.Split(lines[len(lines)-1], ",")
+		if ip := net.ParseIP(strings.TrimSpace(entries[len(entries)-1])); ip != nil {
+			return ipBucket(ip)
 		}
-		return strings.TrimSpace(fwd)
 	}
-	return r.RemoteAddr
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ipBucket(ip)
+	}
+	return host
+}
+
+func ipBucket(ip net.IP) string {
+	if v4 := ip.To4(); v4 != nil {
+		return v4.String()
+	}
+	return ip.Mask(net.CIDRMask(64, 128)).String() + "/64"
 }
 
 // checkBillingRateLimit applies the tier-aware rate limit to a billing
@@ -385,10 +409,23 @@ func handleSimulateCheckout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, redirectURL, http.StatusFound)
 }
 
+// maxInquiryBody bounds the enterprise inquiry request. The longest text
+// fields together stay well under it.
+const maxInquiryBody = 16 << 10
+
+// setPublicCORS allows the marketing site, and nothing else, to call a public
+// route from a browser. A same-origin call needs no header.
+func setPublicCORS(w http.ResponseWriter, r *http.Request) {
+	w.Header().Add("Vary", "Origin")
+	if origin := r.Header.Get("Origin"); publicCheckoutOrigins[origin] {
+		w.Header().Set("Access-Control-Allow-Origin", origin)
+		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	}
+}
+
 func handleSubmitEnterpriseInquiry(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	setPublicCORS(w, r)
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -398,16 +435,33 @@ func handleSubmitEnterpriseInquiry(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	if !checkBillingRateLimit(w, r) {
+		return
+	}
 
 	var inq governance.EnterpriseInquiry
-	if err := json.NewDecoder(r.Body).Decode(&inq); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxInquiryBody)).Decode(&inq); err != nil {
+		var tooBig *http.MaxBytesError
+		if errors.As(err, &tooBig) {
+			writeJSONError(w, http.StatusRequestEntityTooLarge, "request body is too large")
+			return
+		}
 		writeJSONError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
 	saved, err := getBillingService().SubmitEnterpriseInquiry(r.Context(), &inq)
-	if err != nil {
+	switch {
+	case errors.Is(err, governance.ErrInvalidInquiry):
 		writeJSONError(w, http.StatusBadRequest, err.Error())
+		return
+	case errors.Is(err, governance.ErrInquiryLimit):
+		w.Header().Set("Retry-After", "3600")
+		writeJSONError(w, http.StatusServiceUnavailable, "inquiries are not being accepted right now")
+		return
+	case err != nil:
+		log.Error("failed to save an enterprise inquiry", "error", err)
+		writeJSONError(w, http.StatusInternalServerError, "could not save the inquiry")
 		return
 	}
 
@@ -415,7 +469,7 @@ func handleSubmitEnterpriseInquiry(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"status":  "ok",
 		"message": "Thanks. We read every enterprise inquiry personally and will follow up soon.",
-		"inquiry": saved,
+		"id":      saved.ID,
 	})
 }
 
