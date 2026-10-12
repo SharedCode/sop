@@ -130,6 +130,16 @@ func (s *Store) TraceFor(traceID string) *verify.Trace {
 	return tr
 }
 
+// LookupTrace returns the Trace for traceID if one exists. Unlike TraceFor it
+// never creates one, so a read-only check cannot grow the store or push another
+// trace out of it.
+func (s *Store) LookupTrace(traceID string) (*verify.Trace, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	tr, ok := s.traces[traceID]
+	return tr, ok
+}
+
 // TraceCount reports how many traces the store currently retains.
 func (s *Store) TraceCount() int {
 	s.mu.RLock()

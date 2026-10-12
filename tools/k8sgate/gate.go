@@ -142,8 +142,18 @@ func (g *Gate) validate(w http.ResponseWriter, r *http.Request) {
 		g.respond(w, in, res)
 		return
 	}
+	if err := runbookstore.CheckID("trace id", traceID); err != nil {
+		g.deny(res, err.Error())
+		g.respond(w, in, res)
+		return
+	}
 	wf, _ := g.store.Workflow(rule.Workflow)
-	trace := g.store.TraceFor(traceID)
+	// A read-only check must not create a trace. A trace the store does not
+	// hold is an empty one, which is what an unrecorded run is.
+	trace, ok := g.store.LookupTrace(traceID)
+	if !ok {
+		trace = verify.NewTrace()
+	}
 	if err := wf.CheckSafety(trace, verify.StepID(rule.Step)); err != nil {
 		g.deny(res, err.Error())
 	}
@@ -199,6 +209,10 @@ func (g *Gate) commit(w http.ResponseWriter, r *http.Request) {
 	}
 	if in.TraceID == "" {
 		http.Error(w, "trace_id is required", http.StatusBadRequest)
+		return
+	}
+	if err := runbookstore.CheckID("trace_id", in.TraceID); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	wf, ok := g.store.Workflow(in.Workflow)

@@ -2,9 +2,11 @@ package k8sgate
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/sharedcode/joltrin/v5/tools/runbookstore"
@@ -254,5 +256,59 @@ func TestHealthz(t *testing.T) {
 	g.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
 	if rec.Code != http.StatusOK {
 		t.Errorf("status = %d, want 200", rec.Code)
+	}
+}
+
+// Many requests hit one gate at once, on the same and on different traces.
+// Run with -race: it fails if the store or a trace is touched without a lock.
+func TestConcurrentValidateAndCommitAreSafe(t *testing.T) {
+	g, _ := newGate(t, WithCommitToken("s3cret"))
+	var wg sync.WaitGroup
+	for i := 0; i < 32; i++ {
+		trace := fmt.Sprintf("t%d", i%4)
+		wg.Add(3)
+		go func() {
+			defer wg.Done()
+			commit(t, g, "s3cret", "db-maintenance", trace, "take_backup")
+		}()
+		go func() {
+			defer wg.Done()
+			commit(t, g, "s3cret", "db-maintenance", trace, "validate_backup")
+		}()
+		go func() {
+			defer wg.Done()
+			validate(t, g, review("DELETE", "", "persistentvolumeclaims", map[string]string{TraceAnnotation: trace}))
+		}()
+	}
+	wg.Wait()
+	for i := 0; i < 4; i++ {
+		v := validate(t, g, review("DELETE", "", "persistentvolumeclaims", map[string]string{TraceAnnotation: fmt.Sprintf("t%d", i)}))
+		if !v.Allowed {
+			t.Errorf("trace t%d: denied after both steps were recorded: %s", i, v.Message)
+		}
+	}
+}
+
+// /validate is read-only. If it created traces, anything that can reach the
+// gate could push recorded steps out of the store by sending fresh trace ids.
+func TestValidateDoesNotCreateTraces(t *testing.T) {
+	g, s := newGate(t)
+	for i := 0; i < 5; i++ {
+		validate(t, g, review("DELETE", "", "persistentvolumeclaims", map[string]string{TraceAnnotation: fmt.Sprintf("fresh-%d", i)}))
+	}
+	if n := s.TraceCount(); n != 0 {
+		t.Errorf("TraceCount = %d after validate-only requests, want 0", n)
+	}
+}
+
+func TestOverlongTraceIDIsRefused(t *testing.T) {
+	g, _ := newGate(t, WithCommitToken("s3cret"))
+	long := strings.Repeat("a", runbookstore.MaxIDLength+1)
+	if code, _ := commit(t, g, "s3cret", "db-maintenance", long, "take_backup"); code != http.StatusBadRequest {
+		t.Errorf("commit with a %d byte trace id = %d, want 400", len(long), code)
+	}
+	v := validate(t, g, review("DELETE", "", "persistentvolumeclaims", map[string]string{TraceAnnotation: long}))
+	if v.Allowed {
+		t.Error("DELETE allowed with an overlong trace id")
 	}
 }
