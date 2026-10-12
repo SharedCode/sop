@@ -22,7 +22,16 @@ type serverMetrics struct {
 	responses4xx atomic.Int64
 	responses5xx atomic.Int64
 	inFlight     atomic.Int64
+
+	// Request duration histogram. Each bucket counts requests at or under its
+	// bound, as Prometheus expects. Long-lived streaming requests land in the
+	// top buckets.
+	durationBuckets  [len(requestBuckets)]atomic.Int64
+	durationSumNanos atomic.Int64
+	durationCount    atomic.Int64
 }
+
+var requestBuckets = [...]float64{0.005, 0.025, 0.1, 0.25, 0.5, 1, 2.5, 10}
 
 var metrics = serverMetrics{started: time.Now()}
 
@@ -54,6 +63,13 @@ func metricsMiddleware(next http.Handler) http.Handler {
 		start := time.Now()
 		next.ServeHTTP(rec, r)
 		elapsed := time.Since(start)
+		metrics.durationSumNanos.Add(elapsed.Nanoseconds())
+		metrics.durationCount.Add(1)
+		for i, le := range requestBuckets {
+			if elapsed.Seconds() <= le {
+				metrics.durationBuckets[i].Add(1)
+			}
+		}
 
 		switch {
 		case rec.status >= 500:
@@ -88,6 +104,12 @@ func handleMetrics(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "sop_http_responses_total{class=\"4xx\"} %d\n", metrics.responses4xx.Load())
 	fmt.Fprintf(w, "sop_http_responses_total{class=\"5xx\"} %d\n", metrics.responses5xx.Load())
 	fmt.Fprintf(w, "# HELP sop_http_requests_in_flight Requests currently being served.\n# TYPE sop_http_requests_in_flight gauge\nsop_http_requests_in_flight %d\n", metrics.inFlight.Load())
+	fmt.Fprintf(w, "# HELP sop_http_request_duration_seconds Time to serve a request.\n# TYPE sop_http_request_duration_seconds histogram\n")
+	for i, le := range requestBuckets {
+		fmt.Fprintf(w, "sop_http_request_duration_seconds_bucket{le=\"%g\"} %d\n", le, metrics.durationBuckets[i].Load())
+	}
+	count := metrics.durationCount.Load()
+	fmt.Fprintf(w, "sop_http_request_duration_seconds_bucket{le=\"+Inf\"} %d\nsop_http_request_duration_seconds_sum %g\nsop_http_request_duration_seconds_count %d\n", count, float64(metrics.durationSumNanos.Load())/1e9, count)
 	fmt.Fprintf(w, "# HELP sop_goroutines Number of goroutines.\n# TYPE sop_goroutines gauge\nsop_goroutines %d\n", runtime.NumGoroutine())
 	fmt.Fprintf(w, "# HELP sop_heap_alloc_bytes Bytes of allocated heap objects.\n# TYPE sop_heap_alloc_bytes gauge\nsop_heap_alloc_bytes %d\n", mem.HeapAlloc)
 }

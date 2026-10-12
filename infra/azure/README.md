@@ -14,7 +14,7 @@ on push to `master`; this doc covers what it provisions and how to run it by han
 - **Container Apps environment** wired to that workspace
 - **Container App**, pinned to `minReplicas = maxReplicas = 1` (see the comment in `modules/container-app.bicep` for why), 0.5 vCPU / 1Gi, liveness/readiness/startup probes on `/api/health`
 - **Cost budget** with alerts at 50/75/90/100% of a monthly USD threshold
-- **Azure Monitor metric alerts** (CPU%, memory%, restart-loop) on the Container App, wired to an email action group
+- **Azure Monitor metric alerts** (CPU%, memory%, restart-loop, no running replica, burst of 5xx responses) on the Container App, wired to an email action group. The app also serves Prometheus metrics at `/metrics`, including a request duration histogram
 
 ## Why pinned to 1 replica, and no Redis
 

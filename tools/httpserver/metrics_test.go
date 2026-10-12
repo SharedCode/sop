@@ -63,3 +63,26 @@ func TestMetricsMiddlewareCountsResponses(t *testing.T) {
 		t.Errorf("expected 0 in-flight after completion, got %d", inFlight)
 	}
 }
+
+func TestMetricsExposeRequestDurationHistogram(t *testing.T) {
+	h := metricsMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/fast", nil))
+
+	rec := httptest.NewRecorder()
+	handleMetrics(rec, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	body := rec.Body.String()
+	for _, want := range []string{
+		"# TYPE sop_http_request_duration_seconds histogram",
+		`sop_http_request_duration_seconds_bucket{le="10"}`,
+		`sop_http_request_duration_seconds_bucket{le="+Inf"}`,
+		"sop_http_request_duration_seconds_sum ",
+		"sop_http_request_duration_seconds_count ",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("metrics missing %q", want)
+		}
+	}
+	if metrics.durationCount.Load() < 1 || metrics.durationBuckets[len(requestBuckets)-1].Load() < 1 {
+		t.Error("a fast request should be counted in the top bucket")
+	}
+}

@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -161,6 +162,15 @@ func executeStepHandler(store *runbookstore.Store, cfg *config) server.ToolHandl
 		traceID := req.GetString("trace_id", "")
 		idempotencyKey := req.GetString("idempotency_key", "")
 
+		// Only a workflow the server knows is used as a label, so a caller
+		// cannot grow the metrics by sending new names.
+		d := decision{outcome: "invalid", trace: traceID, step: stepID}
+		start := time.Now()
+		defer func() {
+			d.took = time.Since(start)
+			cfg.observe(d)
+		}()
+
 		if err := checkIDs(map[string]string{"workflow": name, "step": stepID, "trace_id": traceID, "idempotency_key": idempotencyKey}); err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
@@ -168,6 +178,7 @@ func executeStepHandler(store *runbookstore.Store, cfg *config) server.ToolHandl
 		if !ok {
 			return unknownWorkflowResult(store, name), nil
 		}
+		d.workflow = name
 		if _, ok := wf.Steps[verify.StepID(stepID)]; !ok {
 			return unknownStepResult(wf, name, stepID), nil
 		}
@@ -191,6 +202,10 @@ func executeStepHandler(store *runbookstore.Store, cfg *config) server.ToolHandl
 			return keyReusedResult(reused), nil
 		}
 		if err == nil {
+			d.outcome = "allowed"
+			if replayed {
+				d.outcome = "replayed"
+			}
 			if !replayed {
 				cfg.recordRecovery(name, traceID, stepID, wf)
 			}
@@ -206,6 +221,7 @@ func executeStepHandler(store *runbookstore.Store, cfg *config) server.ToolHandl
 			return unknownStepResult(wf, name, stepID), nil
 		}
 		blocked := blockReason(wf, v)
+		d.outcome, d.blockedBy, d.missing, d.attempts = "blocked", blocked.BlockedBy, blocked.MissingState, blocked.Attempts
 		// The lesson comes from runs before this one, so it is read before
 		// this block is recorded. A repeat inside one run has the next
 		// field already and gets no lesson.
@@ -222,7 +238,12 @@ func executeStepHandler(store *runbookstore.Store, cfg *config) server.ToolHandl
 		}
 		if replayed {
 			res.Hint = replayedBlockHint
+		} else if cfg.retryLimit > 0 && v.Attempts > cfg.retryLimit {
+			blocked.Next = verify.NextStopAndAsk
+			res.Hint = retryLimitHint(v.Attempts, cfg.retryLimit)
+			d.stopped = true
 		}
+		d.next = blocked.Next
 		return mcp.NewToolResultStructuredOnly(res), nil
 	}
 }
