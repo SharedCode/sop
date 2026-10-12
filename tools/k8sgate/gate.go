@@ -179,6 +179,25 @@ func (g *Gate) deny(res *admissionResult, msg string) {
 	}{Message: msg}
 }
 
+// maxLogValue bounds each request-supplied value in an audit record.
+const maxLogValue = 256
+
+// logSafe makes a request-supplied value safe to put in a log record: line
+// breaks and other control characters are replaced, and long values are cut.
+func logSafe(v string) string {
+	v = strings.ReplaceAll(strings.ReplaceAll(v, "\n", " "), "\r", " ")
+	v = strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return '?'
+		}
+		return r
+	}, v)
+	if r := []rune(v); len(r) > maxLogValue {
+		return string(r[:maxLogValue]) + "..."
+	}
+	return v
+}
+
 // finish records the decision in the metrics and the audit log, then replies.
 func (g *Gate) finish(w http.ResponseWriter, in admissionReview, res *admissionResult, traceID string, matched bool) {
 	result, reason := "unmatched", ""
@@ -198,8 +217,8 @@ func (g *Gate) finish(w http.ResponseWriter, in admissionReview, res *admissionR
 	req := in.Request
 	g.metrics.admit(req.Operation, req.Resource.Resource, result)
 	if g.log != nil {
-		g.log.Info("admission", "result", result, "operation", req.Operation,
-			"resource", req.Resource.Resource, "trace_id", traceID, "uid", req.UID, "reason", reason)
+		g.log.Info("admission", "result", result, "operation", logSafe(req.Operation),
+			"resource", logSafe(req.Resource.Resource), "trace_id", logSafe(traceID), "uid", logSafe(req.UID), "reason", logSafe(reason))
 	}
 	g.respond(w, in, res)
 }

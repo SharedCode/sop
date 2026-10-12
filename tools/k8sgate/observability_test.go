@@ -111,3 +111,19 @@ func TestFromFilesUsesTheConfiguredLogger(t *testing.T) {
 		t.Errorf("no audit record in %q", buf.String())
 	}
 }
+
+func TestAuditRecordsNeutraliseControlCharactersAndBoundLength(t *testing.T) {
+	var buf bytes.Buffer
+	g, _ := newGate(t, WithLogger(slog.New(slog.NewTextHandler(&buf, nil))))
+	long := strings.Repeat("a", 5000)
+	validate(t, g, review("DELETE\nlevel=ERROR msg=forged"+long, "", "pods\nforged", nil))
+	validate(t, g, review("DELETE", "", "persistentvolumeclaims", map[string]string{"joltrin.dev/trace-id": long + "\r\nforged"}))
+
+	out := buf.String()
+	if n := strings.Count(strings.TrimRight(out, "\n"), "\n"); n != 1 {
+		t.Errorf("a request value broke the audit log into %d line breaks, want exactly 1 between the two records:\n%s", n, out)
+	}
+	if len(out) > 3000 {
+		t.Errorf("audit record is %d bytes, request values should be bounded", len(out))
+	}
+}
