@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -83,6 +85,32 @@ func TestObservabilityEnv(t *testing.T) {
 	}
 	if _, err := os.Stat(logPath); err != nil {
 		t.Errorf("decision log file was not created: %v", err)
+	}
+	if strings.Contains(errw.String(), "not loopback") {
+		t.Error("a loopback address should not warn")
+	}
+
+	// The server answers with the Prometheus text format.
+	start := strings.Index(errw.String(), "http://")
+	url := strings.Fields(errw.String()[start:])[0]
+	resp, err := http.Get(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 200 || !strings.Contains(string(body), "# TYPE joltrin_step_duration_seconds histogram") {
+		t.Errorf("metrics endpoint: status %d body %q", resp.StatusCode, body)
+	}
+
+	var wide bytes.Buffer
+	_, closeWide, err := observability(env(map[string]string{"SOP_METRICS_ADDR": "0.0.0.0:0"}), &wide)
+	if err != nil {
+		t.Fatal(err)
+	}
+	closeWide()
+	if !strings.Contains(wide.String(), "not loopback") {
+		t.Errorf("an all-interfaces address should warn: %q", wide.String())
 	}
 
 	if _, _, err := observability(env(map[string]string{"SOP_METRICS_ADDR": "not an address"}), &errw); err == nil {

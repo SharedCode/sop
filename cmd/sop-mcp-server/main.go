@@ -162,6 +162,9 @@ func observability(getenv func(string) string, errw io.Writer) ([]mcpserver.Opti
 		}()
 		closers = append(closers, func() { srv.Close() })
 		fmt.Fprintf(errw, "sop-mcp-server: metrics on http://%s/metrics\n", ln.Addr())
+		if tcp, ok := ln.Addr().(*net.TCPAddr); ok && !tcp.IP.IsLoopback() {
+			fmt.Fprintln(errw, "sop-mcp-server: warning: the metrics address is not loopback, so anything that can reach it can read the metrics")
+		}
 		opts = append(opts, mcpserver.WithMetrics(m))
 	}
 	return opts, closeAll, nil
