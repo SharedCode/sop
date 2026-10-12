@@ -77,7 +77,7 @@ az containerapp update -n joltrin-app -g joltrin-prod-rg --image <registry>.azur
 - The rate limit identifies a caller by the rightmost `X-Forwarded-For` entry, which is the one Container Apps supplies and documents as the only trusted one (IPv6 grouped by /64). That is only correct behind that ingress. If the server were exposed directly, a client could set that entry too.
 - I found no throttling on `/api/auth/login`. The root account needs a password of at least 16 characters.
 - Uptime history starts when `.github/workflows/uptime.yml` begins running, and there is no SLO. One alert path was exercised on purpose (see `docs/INCIDENTS.md`), and the five real alerts have not fired.
-- Rollback and restore have not been rehearsed, and the file share's snapshot policy has not been checked.
+- Rollback to an earlier image was rehearsed once on 2026-10-12 (see `docs/INCIDENTS.md`). Restore of the data share has not been, and the file share's snapshot policy has not been checked.
 - The billing store is single writer, which is why the app is pinned to one replica.
 
 ## Deploying by hand

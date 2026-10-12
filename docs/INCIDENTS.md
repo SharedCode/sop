@@ -23,8 +23,15 @@ A dated log for the live Azure app (`joltrin-app`, one replica) and the release 
 - **Result:** Azure recorded the alert as `Fired` at 03:37:23, about 3.5 minutes after the rule was created, with notifications not suppressed. The rule was deleted at 03:38. The five real alerts were left unchanged.
 - **Not tested:** that the notification email arrived (check the inbox of the address on the action group), and that the real CPU, memory, restart, 5xx and no-replica alerts fire on their own conditions. None of those five has fired.
 
+## 2026-10-12 10:16 to 10:20: rollback rehearsal and a stale deploy run
+
+- **Found first:** the `Deploy to Azure Container Apps` run for #541 (started 04:19 UTC) had waited about six hours at the `production` approval, the same pattern as the 15-hour wait above. Its infrastructure step had created revision `joltrin-app--0000021` with the placeholder image, which never became ready. Revision `0000020` kept serving. I cancelled the run instead of approving it.
+- **Rollback:** `az containerapp update --image` to the previous tag (`5.11.1-7791a7b8c64f`). The command returned after 17 seconds and revision `0000022` took 100% of traffic. It reported `Activating` for about a minute and then `Healthy`. An outside probe of `/api/ready` once a second returned 200 on all 20 probes it made, but it stopped before the revision reported `Healthy`, so it only covers the first 20 seconds.
+- **Roll forward:** the same command back to `5.11.1-0c866952d015`. It returned after 18 seconds, revision `0000023` reported `Healthy` after about 50 seconds, and the probe returned 200 on all 39 probes.
+- **Not measured:** request errors under real load (there is none), the app's in-flight requests during the switch, and rollback of the data share.
+- **Side effect:** the app's configured image is now the real image instead of the placeholder. The next deploy run resets it to the placeholder during its infrastructure step and sets it back after the image step, as before.
+
 ## Not yet exercised
 
-- Rollback to an earlier image tag (the commands are in `infra/azure/README.md`).
 - Restore of the data share.
 - The real 5xx and no-replica alerts.
