@@ -3,23 +3,23 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Joltrin | Independent verification for AI agent actions</title>
-  <meta name="description" content="A deterministic barrier that checks an AI agent's action against the recorded trace before it commits, independent of what the agent claims. Open source, MCP and A2A." />
+  <title>Joltrin | Independent verification before AI agents act</title>
+  <meta name="description" content="Check an AI agent's proposed action against recorded workflow state and explicit prerequisites before it commits, and get an actionable decision when a step is missing. A Go verification engine with MCP and A2A servers. Open source." />
   <meta name="keywords" content="AI agent verification barrier, independent verifier, deterministic preconditions, AI agent safety, MCP, A2A, agent policy enforcement, Go, WebAssembly" />
   <link rel="canonical" href="https://joltrinhq.com/" />
 
   <!-- Open Graph / Facebook / LinkedIn -->
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://joltrinhq.com/" />
-  <meta property="og:title" content="Joltrin | Independent verification for AI agent actions" />
-  <meta property="og:description" content="A deterministic barrier that checks an AI agent's action against the recorded trace before it commits, independent of what the agent claims. Open source, MCP and A2A." />
+  <meta property="og:title" content="Joltrin | Independent verification before AI agents act" />
+  <meta property="og:description" content="Check an AI agent's proposed action against recorded workflow state and explicit prerequisites before it commits, and get an actionable decision when a step is missing. A Go verification engine with MCP and A2A servers. Open source." />
   <meta property="og:image" content="https://joltrinhq.com/og-image.png" />
 
   <!-- Twitter / X -->
   <meta property="twitter:card" content="summary_large_image" />
   <meta property="twitter:url" content="https://joltrinhq.com/" />
-  <meta property="twitter:title" content="Joltrin | Independent verification for AI agent actions" />
-  <meta property="twitter:description" content="A deterministic barrier that checks an AI agent's action against the recorded trace before it commits, independent of what the agent claims. Open source, MCP and A2A." />
+  <meta property="twitter:title" content="Joltrin | Independent verification before AI agents act" />
+  <meta property="twitter:description" content="Check an AI agent's proposed action against recorded workflow state and explicit prerequisites before it commits, and get an actionable decision when a step is missing. A Go verification engine with MCP and A2A servers. Open source." />
   <meta property="twitter:image" content="https://joltrinhq.com/og-image.png" />
 
   <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
@@ -408,15 +408,14 @@
           <p class="text-xs font-mono font-semibold uppercase tracking-wider text-brand-400 mb-4">Open source, MCP and A2A</p>
 
           <h1 class="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-white tracking-tight leading-tight mb-4">
-            Independent, deterministic verification for
-            <span class="bg-gradient-to-r from-brand-400 via-accent-cyan to-accent-violet bg-clip-text text-transparent">AI agent actions</span>.
+            Independent verification before
+            <span class="bg-gradient-to-r from-brand-400 via-accent-cyan to-accent-violet bg-clip-text text-transparent">AI agents act</span>.
           </h1>
 
           <p class="text-slate-300 text-base sm:text-lg leading-relaxed mb-3">
-            The agent proposes the action. Joltrin checks it against the recorded trace and fixed preconditions before it commits. It does not use the agent's claims, its context, or its confidence.
-          </p>
+            Check an agent's proposed action against recorded workflow state and explicit prerequisites before it commits. When a required step is missing, the agent gets a structured answer that says what to run first, or to stop and ask a person.</p>
           <p class="text-slate-400 text-sm leading-relaxed mb-6">
-            A claim that something happened is not evidence that it happened.
+            A claim that something happened is not evidence that it happened. The check is Go code that runs outside the agent's reasoning, with the same result every time for the same trace. The system that performs the action still has to wait for its answer.
           </p>
 
           <div class="flex flex-wrap items-center gap-3">
@@ -530,7 +529,10 @@
           The agent and the verifier are separate.
         </h2>
         <p class="text-slate-400 text-sm sm:text-base mt-2 leading-relaxed">
-          An agent that proposes an action and also judges it safe can be wrong in both places for the same reason. Joltrin keeps the two apart. The agent emits intent. The check runs outside the agent's context window, against the steps the server has actually recorded and the runbook's rules.
+          An agent that proposes an action and also judges it safe can be wrong in both places for the same reason. Joltrin keeps the two apart. The agent emits intent. The check runs outside the agent's context window, against the steps the server has actually recorded and the runbook's rules. The check is Go code, so it gives the same answer for the same trace and rules, and the system that performs the action decides whether to wait for it.
+        </p>
+        <p class="text-slate-400 text-sm leading-relaxed mt-3 max-w-3xl">
+          Order matters most where an action is hard to undo: dropping a database, changing infrastructure or network topology, moving money, rotating credentials. In those cases the wrong order is the failure, and a runbook can state the right order once and check it on every call. The flow is: the agent proposes a step, Joltrin checks it against the recorded trace and the rules, a missing prerequisite comes back as a structured block, the agent runs the steps it names or stops and asks, and the integrating system lets the action through only after the check passes.
         </p>
       </div>
 
@@ -924,13 +926,21 @@ barrier -&gt; ALLOWED</pre>
         </div>
         <div class="p-4 rounded-xl bg-dark-950 border border-dark-800">
           <h3 class="font-bold text-white mb-2">Not covered</h3>
-          <p>The barrier only answers, so whatever performs the real action must wait for it. It cannot see what the trace does not contain: a backup in another cloud account has to be represented by a step you trust, such as one that checks that account and then records the result. It does not judge whether an agent's own claim is true.</p>
+          <p>The barrier only answers, so whatever performs the real action must wait for it. It cannot see what the trace does not contain: a backup in another cloud account has to be represented by a step you trust, such as one that checks that account and then records the result. A committed step in the trace means the barrier allowed it, not that the action happened in the world. It does not judge whether an agent's own claim is true, and it does not replace sign-in, access control or isolation around the systems that act.</p>
         </div>
       </div>
-      <p class="text-slate-500 text-xs mt-4 leading-relaxed">
-        No production deployments, customers or third-party benchmarks are claimed. A dry-run mode, where blocked calls are logged and allowed so teams can tune rules first, is a possible direction and is not implemented.
-        <a href="https://github.com/SharedCode/joltrin/blob/master/docs/AGENT_BARRIER_TESTS.md" target="_blank" rel="noopener noreferrer" class="text-brand-400 hover:text-brand-300 underline underline-offset-4">Test results and their limits</a>
-      </p>
+      <dl class="mt-6 grid gap-x-6 gap-y-3 text-sm text-slate-400 leading-relaxed md:grid-cols-[13rem_1fr]">
+        <dt class="font-semibold text-white">Implemented and tested</dt>
+        <dd>The Go verification engine (<a href="https://github.com/SharedCode/joltrin/blob/master/verify" target="_blank" rel="noopener noreferrer" class="text-brand-400 hover:text-brand-300 underline underline-offset-4">verify</a>), the MCP server (<a href="https://github.com/SharedCode/joltrin/blob/master/tools/mcpserver" target="_blank" rel="noopener noreferrer" class="text-brand-400 hover:text-brand-300 underline underline-offset-4">tools/mcpserver</a>), the A2A agent, runbook files that are checked strictly, a single-tenant HTTP mode with a bearer token, and the <code class="text-slate-200">check</code>, <code class="text-slate-200">try</code> and <code class="text-slate-200">demo</code> commands. CI runs the tests with the race detector on the verification, MCP, A2A and runbook packages, and scans for vulnerabilities on every change.</dd>
+        <dt class="font-semibold text-white">Deployed and checked</dt>
+        <dd>A hosted instance of the Joltrin server, which handles the site's billing requests, runs on Azure Container Apps as one replica with a health check, Prometheus metrics with a latency histogram, and five Azure Monitor alerts. This is a different program from the barrier. The barrier is not hosted.</dd>
+        <dt class="font-semibold text-white">Demonstrated</dt>
+        <dd>The barrier in your browser, compiled to WebAssembly, recorded runs with real agents over MCP, and the MCP server's HTTP mode running in a local Kubernetes cluster, checked by hand and not in CI. The tools in the demos are stubs, so they show the checks and not live systems.</dd>
+        <dt class="font-semibold text-white">Not implemented</dt>
+        <dd>A hosted barrier with per-client sign-in and stored state, and a dry-run mode. <a href="https://github.com/SharedCode/joltrin/blob/master/docs/HOSTED_BARRIER_ASSESSMENT.md" target="_blank" rel="noopener noreferrer" class="text-brand-400 hover:text-brand-300 underline underline-offset-4">What hosting it would take</a></dd>
+        <dt class="font-semibold text-white">Not independently validated</dt>
+        <dd>No customers, third-party benchmarks, security audit, or published uptime and traffic figures. <a href="https://github.com/SharedCode/joltrin/blob/master/docs/AGENT_BARRIER_TESTS.md" target="_blank" rel="noopener noreferrer" class="text-brand-400 hover:text-brand-300 underline underline-offset-4">Test results and their limits</a></dd>
+      </dl>
     </section>
 
     <!-- Supporting capability: durable agent memory -->

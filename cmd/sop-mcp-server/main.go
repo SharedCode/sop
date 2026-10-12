@@ -106,7 +106,16 @@ func main() {
 	defer closeObs()
 	opts = append(opts, obsOpts...)
 
-	if err := server.ServeStdio(mcpserver.New(store, opts...)); err != nil {
+	mcp := mcpserver.New(store, opts...)
+	if len(os.Args) > 1 && os.Args[1] == "http" {
+		if code := runHTTP(mcp, os.Args[2:]); code != 0 {
+			closeObs()
+			os.Exit(code)
+		}
+		return
+	}
+
+	if err := server.ServeStdio(mcp); err != nil {
 		fmt.Fprintln(os.Stderr, "sop-mcp-server:", err)
 		os.Exit(1)
 	}

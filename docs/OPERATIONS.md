@@ -141,3 +141,12 @@ Three settings, all off by default, for a server you leave running. None of them
 - `SOP_RETRY_LIMIT=3` is a guardrail against a retry loop. After a step has been blocked that many times for the same reason in one trace, the result says `next: stop_and_ask` with a hint to ask a person. The step stays blocked either way.
 
 These cover `execute_step` on the MCP server. `validate_step` and the A2A server are not counted yet.
+
+## Serving the barrier over HTTP, and in Kubernetes
+
+`sop-mcp-server http` serves the same barrier over MCP streamable HTTP at `/mcp`, with `/healthz` for probes. It listens on `127.0.0.1:8088` unless you pass `--addr`. On any other address it will not start without `SOP_MCP_TOKEN` of at least 16 characters, and every call to `/mcp` must send `Authorization: Bearer <token>`. It stops cleanly on SIGINT or SIGTERM.
+
+It is single tenant. Everyone who holds the token shares one set of runbooks and one trace namespace, so two callers that use the same `trace_id` are working in the same trace. Run one server per team. State is in memory, so a restart forgets traces, which makes the barrier stricter and never looser.
+
+`docker/Dockerfile.barrier` builds a distroless, non-root image, and `deploy/barrier/k8s.yaml` is a one-replica Deployment and Service for it. Create the token secret first, as the comment at the top of the manifest says. Both were run once on a local `kind` cluster, by hand. No workflow builds or deploys them. [HOSTED_BARRIER_ASSESSMENT.md](HOSTED_BARRIER_ASSESSMENT.md) lists what is still missing before a hosted service.
+

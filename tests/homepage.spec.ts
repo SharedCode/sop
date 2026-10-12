@@ -11,8 +11,8 @@ test.describe('Homepage', () => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     const h1 = page.getByRole('heading', { level: 1 });
     await expect(h1).toContainText(/independent/i);
-    await expect(h1).toContainText(/deterministic verification/i);
-    await expect(h1).toContainText(/AI agent actions/i);
+    await expect(h1).toContainText(/verification before/i);
+    await expect(h1).toContainText(/AI agents act/i);
     await expect(page.getByRole('link', { name: /try the live barrier/i })).toHaveAttribute('href', /agents/);
     await expect(page.getByRole('link', { name: /quickstart on github/i })).toHaveAttribute('href', /joltrin#try-it-in-five-minutes/);
     // The hero text must sit inside the viewport, not be clipped by an overflowing child.
@@ -70,6 +70,11 @@ test.describe('Homepage', () => {
     }
     await expect(section).toContainText(/another cloud account/i);
     await expect(section).toContainText(/not implemented/i);
+    for (const row of ['Implemented and tested', 'Deployed and checked', 'Demonstrated', 'Not implemented', 'Not independently validated']) {
+      await expect(section).toContainText(row);
+    }
+    await expect(section).toContainText(/the barrier is not hosted/i);
+    await expect(section).toContainText(/not that the action happened/i);
   });
 
   test('the page does not lead with database or infrastructure claims', async ({ page }) => {

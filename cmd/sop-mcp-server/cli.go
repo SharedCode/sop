@@ -10,6 +10,7 @@ const usageText = `sop-mcp-server runs the Joltrin verification barrier as an MC
 
 Usage:
   sop-mcp-server                       serve over stdio, which is how an agent launches it
+  sop-mcp-server http [--addr ADDR]    serve over MCP streamable HTTP for one team (default 127.0.0.1:8088, path /mcp)
   sop-mcp-server setup [--apply]       register it with Claude Code, Codex and the Gemini CLI
                        [--lessons DIR] [--runbooks FILE]
   sop-mcp-server check [--json] FILE   show what a runbook file enforces, or why it does not load
@@ -24,6 +25,7 @@ Environment:
   SOP_LESSONS_DIR  folder that turns on memory of earlier blocks
   SOP_METRICS_ADDR address such as 127.0.0.1:9464 that serves Prometheus metrics on /metrics
   SOP_DECISION_LOG "stderr" or a file path: one JSON line per execute_step decision
+  SOP_MCP_TOKEN    bearer token for the http command, at least 16 characters if --addr is not loopback
   SOP_RETRY_LIMIT  after this many blocks of one step in a trace, tell the agent to stop and ask
 
 Exit codes: 0 success, 1 failure, 2 usage error.
@@ -49,6 +51,8 @@ func dispatch(args []string, out, errw io.Writer) (code int, serve bool) {
 	}
 	switch args[0] {
 	case "stdio", "serve":
+		return 0, true
+	case "http":
 		return 0, true
 	case "help", "-h", "--help":
 		fmt.Fprint(out, usageText)
