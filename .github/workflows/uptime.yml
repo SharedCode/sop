@@ -1,0 +1,50 @@
+# A scheduled check of the live Azure app from outside Azure. It reads
+# /api/health (liveness) and /api/ready (readiness) and fails the run if either
+# does not return 200 with the expected body after three tries. Run history is the availability record:
+#   gh run list --workflow uptime.yml --limit 500 --json conclusion
+# GitHub's scheduler can delay or skip runs, so treat the history as a
+# sample, not a complete measurement. It uses no secrets and changes nothing.
+name: Live app check
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Health and readiness
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe the live app
+        env:
+          BASE_URL: ${{ vars.JOLTRIN_PUBLIC_URL }}
+        run: |
+          set -u
+          if [ -z "$BASE_URL" ]; then
+            echo "JOLTRIN_PUBLIC_URL is not set" >&2
+            exit 1
+          fi
+          fail=0
+          {
+            echo "| Path | Status | Seconds |"
+            echo "| --- | --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for check in '/api/health|"status":"ok"' '/api/ready|"status":"ready"'; do
+            path=${check%%|*}; want=${check#*|}
+            code=000; secs=0; ok=no
+            for try in 1 2 3; do
+              out=$(curl -s -o /tmp/body --max-time 20 -w '%{http_code} %{time_total}' "$BASE_URL$path" || true)
+              code=${out%% *}; secs=${out##* }
+              # The server answers 200 for unknown paths, so check the body too.
+              if [ "$code" = 200 ] && grep -q "$want" /tmp/body; then ok=yes; break; fi
+              sleep 5
+            done
+            echo "| $path | $code | $secs |" >> "$GITHUB_STEP_SUMMARY"
+            [ "$ok" = yes ] || { echo "$path failed: status $code, expected body with $want" >&2; fail=1; }
+          done
+          exit $fail
