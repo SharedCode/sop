@@ -91,7 +91,7 @@ drop_prod_db      allowed</pre>
     <p>The same check gates an A2A agent. A blocked step moves the task to <code>input-required</code> with the same fields. See <a href="https://github.com/SharedCode/joltrin/blob/master/docs/AGENT_PROTOCOLS.md" target="_blank" rel="noopener noreferrer">Agent protocols</a>.</p>
 
     <h2>Limits</h2>
-    <p>The barrier only answers, so whatever performs the action must wait for it. It cannot see facts the trace does not contain. A backup in another cloud account has to be represented by a step you trust, such as one that checks that account and records the result. The browser demos run the real checks against stub tools. A hosted instance of the Joltrin server, which handles the site's billing requests, runs on Azure Container Apps with a health check and alerts. The barrier itself is not run as a hosted service. No customers or third-party benchmarks are claimed.</p>
+    <p>The barrier only answers, so whatever performs the action must wait for it. It cannot see facts the trace does not contain. A backup in another cloud account has to be represented by a step you trust, such as one that checks that account and records the result. The browser demos run the real checks against stub tools. A hosted instance of the Joltrin server, which handles the site's billing requests, runs on Azure Container Apps with a health check and alerts. The barrier itself is not run as a hosted service. No customers or third-party benchmarks are claimed. Hosting the barrier as a remote service is assessed in <a href="https://github.com/SharedCode/joltrin/blob/master/docs/HOSTED_BARRIER_ASSESSMENT.md">the hosting assessment</a> and is not built.</p>
 
     <h2>Reference</h2>
     <ul>

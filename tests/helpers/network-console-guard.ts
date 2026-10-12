@@ -12,7 +12,10 @@ export class NetworkConsoleGuard {
   private uncaughtExceptions: string[] = [];
   private failedRequests: { url: string; status: number; statusText: string }[] = [];
   private allowedFailedUrls: RegExp[] = [];
-  private allowedConsoleErrors: RegExp[] = [];
+  // The YouTube embed's own player script probes the Compute Pressure API and
+  // Chromium logs a permissions policy error for it, in roughly 1 load in 15.
+  // It comes from youtube-nocookie.com, not from this site.
+  private allowedConsoleErrors: RegExp[] = [/Permissions policy violation: compute-pressure/];
 
   constructor(page: Page) {
     this.page = page;
