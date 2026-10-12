@@ -131,3 +131,13 @@ If you must delete the data files manually (e.g., during local development or a 
 
 **Why this is necessary**:
 Redis maintains locks and cached metadata with a default timeout (typically 15 minutes). If you delete the files but leave the Redis keys active, any new application instance you start will see "ghost" locks or stale metadata, preventing it from recreating the stores or acquiring locks until the timeout expires.
+
+## Watching the barrier server and capping retries
+
+Three settings, all off by default, for a server you leave running. None of them changes what the barrier allows or blocks.
+
+- `SOP_METRICS_ADDR=127.0.0.1:9464` serves Prometheus metrics at `/metrics`: `joltrin_steps_total` by workflow and outcome (`allowed`, `replayed`, `blocked`, `invalid`), `joltrin_blocks_total` by the rule that blocked, and a `joltrin_step_duration_seconds` histogram. It binds where you tell it to, so keep it on localhost or behind your own access control. Only workflows the server knows become labels.
+- `SOP_DECISION_LOG=stderr` (or a file path) writes one JSON line per `execute_step`: time, workflow, trace, step, outcome, the rule and missing state for a block, and how long the check took. It never uses stdout, which carries the MCP protocol.
+- `SOP_RETRY_LIMIT=3` is a guardrail against a retry loop. After a step has been blocked that many times for the same reason in one trace, the result says `next: stop_and_ask` with a hint to ask a person. The step stays blocked either way.
+
+These cover `execute_step` on the MCP server. `validate_step` and the A2A server are not counted yet.

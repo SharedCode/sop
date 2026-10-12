@@ -167,16 +167,6 @@ With a file, the server serves exactly those runbooks. It refuses a file with a 
 
 What this catches: an agent that skips a required step, breaks a safety rule, or names a step that does not exist. What it does not do: judge whether an agent's own claim is true. That needs evidence from a tool the agent cannot fake, so it is not something a runbook file can add.
 
-## Watch what the barrier decides, and cap retries
-
-Three settings, all off by default, for a server you leave running. None of them changes what the barrier allows or blocks.
-
-- `SOP_METRICS_ADDR=127.0.0.1:9464` serves Prometheus metrics at `/metrics`: `joltrin_steps_total` by workflow and outcome (`allowed`, `replayed`, `blocked`, `invalid`), `joltrin_blocks_total` by the rule that blocked, and a `joltrin_step_duration_seconds` histogram. It binds where you tell it to, so keep it on localhost or behind your own access control. Only workflows the server knows become labels.
-- `SOP_DECISION_LOG=stderr` (or a file path) writes one JSON line per `execute_step`: time, workflow, trace, step, outcome, the rule and missing state for a block, and how long the check took. It never uses stdout, which carries the MCP protocol.
-- `SOP_RETRY_LIMIT=3` is a guardrail against a retry loop. After a step has been blocked that many times for the same reason in one trace, the result says `next: stop_and_ask` with a hint to ask a person. The step stays blocked either way.
-
-These cover `execute_step` on the MCP server. `validate_step` and the A2A server are not counted yet.
-
 ## Command reference
 
 `sop-mcp-server help` prints this list. With no arguments it serves MCP over stdio, which is how an agent launches it.
@@ -191,7 +181,7 @@ These cover `execute_step` on the MCP server. `validate_step` and the A2A server
 | `sop-mcp-server version` | Print the version. A published binary reports its release tag, and a build from a working copy reports `dev`. |
 | `sop-mcp-server help` | Print the commands. |
 
-Environment variables: `SOP_RUNBOOKS` serves your own runbooks instead of the example, `SOP_LESSONS_DIR` turns on memory of earlier blocks, and `SOP_METRICS_ADDR`, `SOP_DECISION_LOG` and `SOP_RETRY_LIMIT` are described above. `JOLTRIN_DEMO_PAUSE` sets the pause between steps in `go run ./examples/verify_barrier` (`0` removes it).
+Environment variables: `SOP_RUNBOOKS` serves your own runbooks instead of the example, and `SOP_LESSONS_DIR` turns on memory of earlier blocks. `JOLTRIN_DEMO_PAUSE` sets the pause between steps in `go run ./examples/verify_barrier` (`0` removes it).
 
 Exit codes are the same everywhere: 0 for success, 1 for a failure, and 2 for a usage error such as an unknown command. An unknown command no longer starts a server.
 

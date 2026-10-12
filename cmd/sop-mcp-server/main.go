@@ -24,6 +24,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -154,7 +155,11 @@ func observability(getenv func(string) string, errw io.Writer) ([]mcpserver.Opti
 		mux := http.NewServeMux()
 		mux.Handle("/metrics", m.Handler())
 		srv := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
-		go srv.Serve(ln)
+		go func() {
+			if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				fmt.Fprintln(errw, "sop-mcp-server: the metrics server stopped:", err)
+			}
+		}()
 		closers = append(closers, func() { srv.Close() })
 		fmt.Fprintf(errw, "sop-mcp-server: metrics on http://%s/metrics\n", ln.Addr())
 		opts = append(opts, mcpserver.WithMetrics(m))
