@@ -254,6 +254,11 @@
       animation: pulse-slow 3s ease-in-out infinite;
     }
   </style>
+  <style>
+    /* Footer links are standalone targets, keep them at least 24px tall. */
+    footer ul a { display: inline-block; padding-block: .3rem; }
+    footer ul a.flex { display: flex; }
+  </style>
 </head>
 <body class="bg-dark-950 text-slate-200 min-h-screen flex flex-col antialiased selection:bg-brand-500 selection:text-black">
 
@@ -453,7 +458,6 @@
           data-src="https://www.youtube-nocookie.com/embed/F0jYkBHJluI?autoplay=1&mute=1&loop=1&playlist=F0jYkBHJluI&playsinline=1&rel=0"
           title="Joltrin intro video"
           allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-          allowfullscreen
           referrerpolicy="strict-origin-when-cross-origin"></iframe>
       </div>
     </section>
@@ -465,7 +469,6 @@
           src="https://www.youtube-nocookie.com/embed/oS1bfq_ZDkg?playsinline=1&rel=0"
           title="Joltrin short video"
           allow="encrypted-media; picture-in-picture; fullscreen"
-          allowfullscreen
           referrerpolicy="strict-origin-when-cross-origin"></iframe>
       </div>
     </section>
@@ -1110,7 +1113,7 @@ Error from server: admission webhook "gate.joltrin.dev" denied the request: step
 
               <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label class="block text-[11px] text-slate-400 font-mono mb-1">Debit From</label>
+                  <label for="tx-from" class="block text-[11px] text-slate-400 font-mono mb-1">Debit From</label>
                   <select id="tx-from" class="w-full bg-dark-950 border border-dark-700 rounded-lg px-3 py-2 text-xs font-mono text-white focus:border-brand-500 focus:outline-none">
                     <option value="acc:001">acc:001 (Acme Corp)</option>
                     <option value="acc:002">acc:002 (Starlight Fund)</option>
@@ -1118,7 +1121,7 @@ Error from server: admission webhook "gate.joltrin.dev" denied the request: step
                   </select>
                 </div>
                 <div>
-                  <label class="block text-[11px] text-slate-400 font-mono mb-1">Credit To</label>
+                  <label for="tx-to" class="block text-[11px] text-slate-400 font-mono mb-1">Credit To</label>
                   <select id="tx-to" class="w-full bg-dark-950 border border-dark-700 rounded-lg px-3 py-2 text-xs font-mono text-white focus:border-brand-500 focus:outline-none">
                     <option value="acc:002">acc:002 (Starlight Fund)</option>
                     <option value="acc:001">acc:001 (Acme Corp)</option>
@@ -1126,7 +1129,7 @@ Error from server: admission webhook "gate.joltrin.dev" denied the request: step
                   </select>
                 </div>
                 <div>
-                  <label class="block text-[11px] text-slate-400 font-mono mb-1">Amount ($ USD)</label>
+                  <label for="tx-amount" class="block text-[11px] text-slate-400 font-mono mb-1">Amount ($ USD)</label>
                   <input id="tx-amount" type="number" value="250000" step="10000" class="w-full bg-dark-950 border border-dark-700 rounded-lg px-3 py-2 text-xs font-mono text-white focus:border-brand-500 focus:outline-none" />
                 </div>
               </div>
@@ -1494,7 +1497,7 @@ Error from server: admission webhook "gate.joltrin.dev" denied the request: step
 
       <p class="text-xs text-slate-500 text-center">
         Hosted Joltrin Cloud is planned and not available yet.
-        <button onclick="selectTierAndScroll('hosted')" class="text-accent-cyan hover:underline cursor-pointer">Join the waitlist</button>.
+        <button onclick="selectTierAndScroll('hosted')" class="text-accent-cyan hover:underline cursor-pointer" style="padding-block:.4rem">Join the waitlist</button>.
       </p>
     </section>
 

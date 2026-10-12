@@ -37,3 +37,6 @@
 .animate-fade-in {
   animation: fadeIn 0.2s ease-out forwards;
 }
+
+/* Footer links are standalone targets, keep them at least 24px tall. */
+footer ul a { display: inline-block; padding-block: 0.3rem; }
