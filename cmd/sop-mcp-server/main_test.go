@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -43,5 +44,48 @@ func TestNewStoreRefusesABadFile(t *testing.T) {
 	}
 	if _, _, err := newStore(filepath.Join(t.TempDir(), "nope.json")); err == nil {
 		t.Error("a missing file must be an error")
+	}
+}
+
+func TestObservabilityEnv(t *testing.T) {
+	env := func(m map[string]string) func(string) string {
+		return func(k string) string { return m[k] }
+	}
+	var errw bytes.Buffer
+
+	opts, closeAll, err := observability(env(nil), &errw)
+	if err != nil || len(opts) != 0 {
+		t.Fatalf("nothing set: opts=%d err=%v", len(opts), err)
+	}
+	closeAll()
+
+	for _, bad := range []string{"0", "-1", "many"} {
+		if _, _, err := observability(env(map[string]string{"SOP_RETRY_LIMIT": bad}), &errw); err == nil {
+			t.Errorf("SOP_RETRY_LIMIT=%q should be refused", bad)
+		}
+	}
+
+	logPath := filepath.Join(t.TempDir(), "decisions.jsonl")
+	opts, closeAll, err = observability(env(map[string]string{
+		"SOP_RETRY_LIMIT":  "3",
+		"SOP_DECISION_LOG": logPath,
+		"SOP_METRICS_ADDR": "127.0.0.1:0",
+	}), &errw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeAll()
+	if len(opts) != 3 {
+		t.Fatalf("got %d options, want 3", len(opts))
+	}
+	if !strings.Contains(errw.String(), "metrics on http://127.0.0.1:") {
+		t.Errorf("startup line missing: %q", errw.String())
+	}
+	if _, err := os.Stat(logPath); err != nil {
+		t.Errorf("decision log file was not created: %v", err)
+	}
+
+	if _, _, err := observability(env(map[string]string{"SOP_METRICS_ADDR": "not an address"}), &errw); err == nil {
+		t.Error("a bad SOP_METRICS_ADDR should be refused")
 	}
 }

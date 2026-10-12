@@ -25,9 +25,14 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/mark3labs/mcp-go/server"
 
@@ -92,8 +97,67 @@ func main() {
 		opts = append(opts, mcpserver.WithMemory(log, filepath.Join(dir, "LESSONS.md")))
 	}
 
+	obsOpts, closeObs, err := observability(os.Getenv, os.Stderr)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "sop-mcp-server:", err)
+		os.Exit(1)
+	}
+	defer closeObs()
+	opts = append(opts, obsOpts...)
+
 	if err := server.ServeStdio(mcpserver.New(store, opts...)); err != nil {
 		fmt.Fprintln(os.Stderr, "sop-mcp-server:", err)
 		os.Exit(1)
 	}
+}
+
+// observability turns SOP_METRICS_ADDR, SOP_DECISION_LOG and SOP_RETRY_LIMIT
+// into server options. The decision log never goes to stdout, which carries
+// the MCP protocol.
+func observability(getenv func(string) string, errw io.Writer) ([]mcpserver.Option, func(), error) {
+	var opts []mcpserver.Option
+	var closers []func()
+	closeAll := func() {
+		for _, c := range closers {
+			c()
+		}
+	}
+
+	if v := getenv("SOP_RETRY_LIMIT"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 {
+			return nil, closeAll, fmt.Errorf("SOP_RETRY_LIMIT must be a whole number of 1 or more, got %q", v)
+		}
+		opts = append(opts, mcpserver.WithRetryLimit(n))
+	}
+
+	if v := getenv("SOP_DECISION_LOG"); v != "" {
+		w := errw
+		if v != "stderr" {
+			f, err := os.OpenFile(v, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+			if err != nil {
+				return nil, closeAll, fmt.Errorf("SOP_DECISION_LOG: %w", err)
+			}
+			closers = append(closers, func() { f.Close() })
+			w = f
+		}
+		opts = append(opts, mcpserver.WithDecisionLog(w))
+	}
+
+	if addr := getenv("SOP_METRICS_ADDR"); addr != "" {
+		ln, err := net.Listen("tcp", addr)
+		if err != nil {
+			closeAll()
+			return nil, func() {}, fmt.Errorf("SOP_METRICS_ADDR: %w", err)
+		}
+		m := mcpserver.NewMetrics()
+		mux := http.NewServeMux()
+		mux.Handle("/metrics", m.Handler())
+		srv := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+		go srv.Serve(ln)
+		closers = append(closers, func() { srv.Close() })
+		fmt.Fprintf(errw, "sop-mcp-server: metrics on http://%s/metrics\n", ln.Addr())
+		opts = append(opts, mcpserver.WithMetrics(m))
+	}
+	return opts, closeAll, nil
 }

@@ -22,6 +22,9 @@ Usage:
 Environment:
   SOP_RUNBOOKS     JSON file with your own runbooks (default: the built-in db-maintenance example)
   SOP_LESSONS_DIR  folder that turns on memory of earlier blocks
+  SOP_METRICS_ADDR address such as 127.0.0.1:9464 that serves Prometheus metrics on /metrics
+  SOP_DECISION_LOG "stderr" or a file path: one JSON line per execute_step decision
+  SOP_RETRY_LIMIT  after this many blocks of one step in a trace, tell the agent to stop and ask
 
 Exit codes: 0 success, 1 failure, 2 usage error.
 `

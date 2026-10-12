@@ -136,3 +136,82 @@ resource restartAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
     ]
   }
 }
+
+// Fires when the app has had no running replica for 5 minutes, which is what
+// an outage looks like from outside. Replicas is pinned to 1, so any dip to 0
+// is user visible.
+resource noReplicaAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
+  name: '${appName}-no-replica'
+  location: 'global'
+  properties: {
+    severity: 0
+    enabled: true
+    scopes: [
+      containerAppId
+    ]
+    evaluationFrequency: 'PT1M'
+    windowSize: 'PT5M'
+    criteria: {
+      'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
+      allOf: [
+        {
+          name: 'NoReplica'
+          metricName: 'Replicas'
+          metricNamespace: 'Microsoft.App/containerApps'
+          operator: 'LessThan'
+          threshold: 1
+          timeAggregation: 'Minimum'
+        }
+      ]
+    }
+    actions: [
+      {
+        actionGroupId: actionGroup.id
+      }
+    ]
+  }
+}
+
+// Fires on a burst of server errors: more than 5 responses in the 5xx class
+// within 15 minutes.
+resource serverErrorAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
+  name: '${appName}-5xx-burst'
+  location: 'global'
+  properties: {
+    severity: 2
+    enabled: true
+    scopes: [
+      containerAppId
+    ]
+    evaluationFrequency: 'PT5M'
+    windowSize: 'PT15M'
+    criteria: {
+      'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
+      allOf: [
+        {
+          name: 'ServerErrors'
+          metricName: 'Requests'
+          metricNamespace: 'Microsoft.App/containerApps'
+          operator: 'GreaterThan'
+          threshold: 5
+          timeAggregation: 'Total'
+          criterionType: 'StaticThresholdCriterion'
+          dimensions: [
+            {
+              name: 'statusCodeCategory'
+              operator: 'Include'
+              values: [
+                '5xx'
+              ]
+            }
+          ]
+        }
+      ]
+    }
+    actions: [
+      {
+        actionGroupId: actionGroup.id
+      }
+    ]
+  }
+}
