@@ -31,7 +31,7 @@ The core is MIT-licensed. Commercial governance features (policy-as-code, audit 
 - CI that runs the race detector and `govulncheck` on every change, and a changelog showing multiple rounds of real dependency and CVE remediation.
 
 **What Has Not Yet Been Proven**
-- No production deployments or paying customers are documented anywhere in this repository.
+- No paying customers are documented anywhere in this repository. A hosted instance of the server runs on Azure Container Apps as a single replica with a health check and alerts, and no uptime or traffic figures are published. The barrier itself is not hosted.
 - No independent, third-party, or peer-reviewed benchmarks exist; the performance numbers below come from this project's own benchmark harness on a single workstation, not a controlled multi-system comparison.
 - Joltrin Arena's cluster view is a UI simulation of the underlying concepts for demonstration purposes, not a live multi-node deployment; multi-node swarm clustering itself is real and tested (`examples/swarm_clustered`, `examples/swarm_standalone`), but has not been run at meaningful scale or under adversarial network conditions in public.
 - No formal third-party security audit has been performed.

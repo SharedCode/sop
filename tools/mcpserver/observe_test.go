@@ -91,6 +91,18 @@ func TestMetricsAndDecisionLogCountEachOutcome(t *testing.T) {
 		first.BlockedBy != "precondition" || first.Missing != "backup_validated" {
 		t.Errorf("first log line: %+v", first)
 	}
+	var second, third struct {
+		Workflow, Step, Outcome string
+		Attempts                int
+	}
+	json.Unmarshal([]byte(lines[1]), &second)
+	json.Unmarshal([]byte(lines[2]), &third)
+	if second.Step != "take_backup" || second.Outcome != "allowed" || second.Workflow != "db-maintenance" {
+		t.Errorf("second log line: %+v", second)
+	}
+	if third.Outcome != "invalid" || third.Workflow != "" {
+		t.Errorf("third log line: %+v", third)
+	}
 }
 
 func TestRetryLimitTellsTheAgentToStopAndAsk(t *testing.T) {
