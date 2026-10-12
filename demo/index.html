@@ -910,6 +910,25 @@ barrier -&gt; ALLOWED</pre>
       })();
     </script>
 
+    <!-- Kubernetes admission gate -->
+    <section id="k8s-gate" class="mb-12 p-6 sm:p-10 rounded-2xl bg-dark-900 border border-dark-800">
+      <div class="max-w-3xl mb-6">
+        <h2 class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight leading-snug">The same barrier, in front of kubectl delete.</h2>
+        <p class="text-slate-400 text-sm sm:text-base mt-2 leading-relaxed">
+          <code class="text-slate-200">sop-k8s-gate</code> is a Kubernetes validating admission webhook. The API server refuses a delete of a protected PersistentVolumeClaim until the runbook's required steps, such as a validated backup, are recorded for the trace named on the object.
+        </p>
+      </div>
+      <div class="grid gap-5 lg:grid-cols-2 items-start">
+        <pre class="p-4 rounded-xl bg-dark-950 border border-dark-750 text-xs font-mono text-slate-300 overflow-x-auto whitespace-pre-wrap">$ kubectl -n prod delete pvc orders-db-data
+Error from server: admission webhook "gate.joltrin.dev" denied the request: step "drop_prod_db" requires state "backup_validated", which has not been established in this trace</pre>
+        <div class="text-sm text-slate-400 leading-relaxed space-y-3">
+          <p>A policy file maps an operation to a runbook step, and it takes the same runbook files as the MCP server. Steps are recorded through a separate endpoint that needs a bearer token. A <code class="text-slate-200">--warn-only</code> mode allows everything and reports what would have been blocked, so a policy can be tried before it enforces.</p>
+          <p>It was checked against a real API server in a local kind cluster, by hand and not in CI. Whoever holds the commit token can record a step, so the token belongs with the job that takes the backup and not with the workload being controlled. It runs as one replica and keeps recorded steps in memory.</p>
+          <a href="https://github.com/SharedCode/joltrin/blob/master/docs/KUBERNETES_GATE.md" target="_blank" rel="noopener noreferrer" class="inline-block text-sm font-mono text-brand-400 hover:text-brand-300 underline underline-offset-4">Read how it works and what it leaves to you</a>
+        </div>
+      </div>
+    </section>
+
     <!-- Proof and limits -->
     <section id="limits" class="mb-12 p-6 sm:p-10 rounded-2xl bg-dark-900 border border-dark-800">
       <div class="max-w-3xl mb-6">
@@ -931,11 +950,11 @@ barrier -&gt; ALLOWED</pre>
       </div>
       <dl class="mt-6 grid gap-x-6 gap-y-3 text-sm text-slate-400 leading-relaxed md:grid-cols-[13rem_1fr]">
         <dt class="font-semibold text-white">Implemented and tested</dt>
-        <dd>The Go verification engine (<a href="https://github.com/SharedCode/joltrin/blob/master/verify" target="_blank" rel="noopener noreferrer" class="text-brand-400 hover:text-brand-300 underline underline-offset-4">verify</a>), the MCP server (<a href="https://github.com/SharedCode/joltrin/blob/master/tools/mcpserver" target="_blank" rel="noopener noreferrer" class="text-brand-400 hover:text-brand-300 underline underline-offset-4">tools/mcpserver</a>), the A2A agent, runbook files that are checked strictly, a single-tenant HTTP mode with a bearer token, and the <code class="text-slate-200">check</code>, <code class="text-slate-200">try</code> and <code class="text-slate-200">demo</code> commands. CI runs the tests with the race detector on the verification, MCP, A2A and runbook packages, and scans for vulnerabilities on every change.</dd>
+        <dd>The Go verification engine (<a href="https://github.com/SharedCode/joltrin/blob/master/verify" target="_blank" rel="noopener noreferrer" class="text-brand-400 hover:text-brand-300 underline underline-offset-4">verify</a>), the MCP server (<a href="https://github.com/SharedCode/joltrin/blob/master/tools/mcpserver" target="_blank" rel="noopener noreferrer" class="text-brand-400 hover:text-brand-300 underline underline-offset-4">tools/mcpserver</a>), the A2A agent, the Kubernetes admission gate (<a href="https://github.com/SharedCode/joltrin/blob/master/tools/k8sgate" target="_blank" rel="noopener noreferrer" class="text-brand-400 hover:text-brand-300 underline underline-offset-4">tools/k8sgate</a>), runbook files that are checked strictly, a single-tenant HTTP mode with a bearer token, and the <code class="text-slate-200">check</code>, <code class="text-slate-200">try</code> and <code class="text-slate-200">demo</code> commands. CI runs the tests with the race detector on the verification, MCP, A2A and runbook packages, and scans for vulnerabilities on every change.</dd>
         <dt class="font-semibold text-white">Deployed and checked</dt>
         <dd>A hosted instance of the Joltrin server, which handles the site's billing requests, runs on Azure Container Apps as one replica with a health check, Prometheus metrics with a latency histogram, and five Azure Monitor alerts. This is a different program from the barrier. The barrier is not hosted. <a href="https://github.com/SharedCode/joltrin/blob/master/infra/azure/README.md" target="_blank" rel="noopener noreferrer" class="text-brand-400 hover:text-brand-300 underline underline-offset-4">How it is run</a>, <a href="https://github.com/SharedCode/joltrin/blob/master/docs/INCIDENTS.md" target="_blank" rel="noopener noreferrer" class="text-brand-400 hover:text-brand-300 underline underline-offset-4">incident and alert-test log</a></dd>
         <dt class="font-semibold text-white">Demonstrated</dt>
-        <dd>The barrier in your browser, compiled to WebAssembly, recorded runs with real agents over MCP, and the MCP server's HTTP mode running in a local Kubernetes cluster, checked by hand and not in CI. The tools in the demos are stubs, so they show the checks and not live systems.</dd>
+        <dd>The barrier in your browser, compiled to WebAssembly, recorded runs with real agents over MCP, and the MCP server's HTTP mode and the Kubernetes admission gate running in a local Kubernetes cluster, checked by hand and not in CI. The tools in the demos are stubs, so they show the checks and not live systems.</dd>
         <dt class="font-semibold text-white">Not implemented</dt>
         <dd>A hosted barrier with per-client sign-in and stored state, and a dry-run mode. <a href="https://github.com/SharedCode/joltrin/blob/master/docs/HOSTED_BARRIER_ASSESSMENT.md" target="_blank" rel="noopener noreferrer" class="text-brand-400 hover:text-brand-300 underline underline-offset-4">What hosting it would take</a></dd>
         <dt class="font-semibold text-white">Not independently validated</dt>

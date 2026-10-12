@@ -123,3 +123,18 @@ func TestCheckIDBoundsWhatACallerCanMakeTheStoreKeep(t *testing.T) {
 		t.Errorf("emptiness is each caller's own rule, not this check's: %v", err)
 	}
 }
+
+func TestLookupTraceDoesNotCreate(t *testing.T) {
+	s := New()
+	if _, ok := s.LookupTrace("t1"); ok {
+		t.Fatal("LookupTrace found a trace that was never created")
+	}
+	if s.TraceCount() != 0 {
+		t.Errorf("TraceCount = %d after a lookup, want 0", s.TraceCount())
+	}
+	created := s.TraceFor("t1")
+	got, ok := s.LookupTrace("t1")
+	if !ok || got != created {
+		t.Errorf("LookupTrace after TraceFor = %v, %v, want the same trace", got, ok)
+	}
+}

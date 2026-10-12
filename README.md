@@ -123,6 +123,10 @@ Then tell your agent: "Use the joltrin tools to run `drop_prod_db` on workflow `
 
 Add `--lessons <folder>` to `setup` and the server remembers what blocked in earlier runs and tells the next agent. Add `--runbooks <file>` and it enforces your own steps and safety rules from a JSON file instead of the example. Both are optional, and the barrier still checks every call. The details are in [Run the server with memory and your own runbooks](docs/AGENT_PROTOCOLS.md#run-the-server-with-memory-and-your-own-runbooks).
 
+### Kubernetes admission gate
+
+`sop-k8s-gate` is a validating admission webhook that applies the same barrier to cluster operations. A `DELETE` on a labelled PersistentVolumeClaim is refused by the API server until the runbook's required steps, such as a validated backup, are recorded for the trace named on the object. It runs as a Deployment with cert-manager, takes the same runbook files as the MCP server, and has a `--warn-only` mode to try a policy before it enforces. What it checks and what it leaves to you, including who may record a step, is in [docs/KUBERNETES_GATE.md](docs/KUBERNETES_GATE.md).
+
 ### Agents that hand off work
 
 Jira, Grafana, AWS, and PagerDuty agents hand off work, and every call passes three checks first: the tool is on that agent's allowlist, any claim matches evidence a tool returned, and the steps it depends on have committed (`verify`). The tools are stubs and the checks are real.
@@ -165,7 +169,7 @@ The engine, vector search, agent memory, and the verification barrier are MIT li
 
 ## Documentation
 
-- The barrier: [Agent protocols (MCP, A2A, memory, runbooks)](docs/AGENT_PROTOCOLS.md), [Barrier test results](docs/AGENT_BARRIER_TESTS.md), [Verification engine](docs/MCP_A2A_AND_VERIFICATION_ENGINE.md)
+- The barrier: [Agent protocols (MCP, A2A, memory, runbooks)](docs/AGENT_PROTOCOLS.md), [Barrier test results](docs/AGENT_BARRIER_TESTS.md), [Verification engine](docs/MCP_A2A_AND_VERIFICATION_ENGINE.md), [Kubernetes admission gate](docs/KUBERNETES_GATE.md)
 - Start here: [Getting started](docs/GETTING_STARTED.md), [Examples](docs/EXAMPLES.md), [What is Joltrin](docs/WHAT_IS_SOP.md)
 - Concepts: [Why Joltrin](docs/WHY_JOLTRIN.md), [Architecture](docs/SOP_ARCHITECTURE_WHITEPAPER.md), [Scalability](docs/SCALABILITY.md)
 - Operating it: [Operations and failover](docs/OPERATIONS.md), [Data Manager and tools](docs/SOP_PLATFORM_TOOLS.md), [Azure deployment](infra/azure/README.md), [Kubernetes with Argo CD](deploy/aks/README.md)
