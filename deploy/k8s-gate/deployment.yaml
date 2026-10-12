@@ -1,0 +1,59 @@
+# Create the commit token before applying:
+#   kubectl -n joltrin-system create secret generic joltrin-gate-commit \
+#     --from-literal=token="$(openssl rand -hex 32)"
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: joltrin-gate
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: joltrin-gate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: joltrin-gate
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: gate
+          image: ghcr.io/sharedcode/joltrin-k8s-gate
+          args:
+            - --policy=/etc/joltrin/policy/policy.json
+            - --tls-cert=/etc/joltrin/tls/tls.crt
+            - --tls-key=/etc/joltrin/tls/tls.key
+            - --commit-token-file=/etc/joltrin/commit/token
+          ports:
+            - name: https
+              containerPort: 8443
+          readinessProbe:
+            httpGet: {path: /healthz, port: https, scheme: HTTPS}
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /healthz, port: https, scheme: HTTPS}
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 50m, memory: 32Mi}
+            limits: {memory: 128Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - {name: policy, mountPath: /etc/joltrin/policy, readOnly: true}
+            - {name: tls, mountPath: /etc/joltrin/tls, readOnly: true}
+            - {name: commit, mountPath: /etc/joltrin/commit, readOnly: true}
+      volumes:
+        - name: policy
+          configMap: {name: joltrin-gate-policy}
+        - name: tls
+          secret: {secretName: joltrin-gate-tls}
+        - name: commit
+          secret: {secretName: joltrin-gate-commit}

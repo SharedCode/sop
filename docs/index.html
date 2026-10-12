@@ -4,11 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Documentation | Joltrin</title>
-  <meta name="description" content="Joltrin documentation: what the verifier protects against, the blocked-result payload, a local demo, and MCP and A2A integration.">
+  <meta name="description" content="Joltrin documentation: what the verifier protects against, the blocked-result payload, a local demo, and MCP, A2A and Kubernetes integration.">
   <link rel="canonical" href="https://joltrinhq.com/docs/">
   <link rel="icon" href="../favicon.svg" type="image/svg+xml">
   <meta property="og:title" content="Joltrin documentation">
-  <meta property="og:description" content="What the verifier protects against, the blocked-result payload, a local demo, and MCP and A2A integration.">
+  <meta property="og:description" content="What the verifier protects against, the blocked-result payload, a local demo, and MCP, A2A and Kubernetes integration.">
   <meta property="og:url" content="https://joltrinhq.com/docs/">
   <style>
     :root { color-scheme: dark; }
@@ -90,6 +90,14 @@ drop_prod_db      allowed</pre>
     <h2>6. A2A integration</h2>
     <p>The same check gates an A2A agent. A blocked step moves the task to <code>input-required</code> with the same fields. See <a href="https://github.com/SharedCode/joltrin/blob/master/docs/AGENT_PROTOCOLS.md" target="_blank" rel="noopener noreferrer">Agent protocols</a>.</p>
 
+    <h2>7. Kubernetes admission gate</h2>
+    <p>The same check can sit in front of cluster operations. <code>sop-k8s-gate</code> is a validating admission webhook. A policy file maps an operation to a runbook step, and the API server refuses the operation until the steps it depends on are recorded for the trace named in the object's <code>joltrin.dev/trace-id</code> annotation:</p>
+<pre>$ kubectl -n prod delete pvc orders-db-data
+Error from server: admission webhook "gate.joltrin.dev" denied the request:
+  step "drop_prod_db" requires state "backup_validated",
+  which has not been established in this trace</pre>
+    <p>Steps are recorded with <code>POST /commit</code> and a bearer token. Give the token to the job that takes the backup, not to the workload being controlled, because anyone who holds it can record a step. <code>--warn-only</code> allows every request and reports what would have been blocked, so you can try a policy first. It runs as one replica and keeps recorded steps in memory. See <a href="https://github.com/SharedCode/joltrin/blob/master/docs/KUBERNETES_GATE.md" target="_blank" rel="noopener noreferrer">Kubernetes admission gate</a> for the manifests, what was checked, and what it does not do.</p>
+
     <h2>Limits</h2>
     <p>The barrier only answers, so whatever performs the action must wait for it. It cannot see facts the trace does not contain. A backup in another cloud account has to be represented by a step you trust, such as one that checks that account and records the result. The browser demos run the real checks against stub tools. A hosted instance of the Joltrin server, which handles the site's billing requests, runs on Azure Container Apps with a health check and alerts. The barrier itself is not run as a hosted service. No customers or third-party benchmarks are claimed. Hosting the barrier as a remote service is assessed in <a href="https://github.com/SharedCode/joltrin/blob/master/docs/HOSTED_BARRIER_ASSESSMENT.md">the hosting assessment</a> and is not built.</p>
 
@@ -97,6 +105,7 @@ drop_prod_db      allowed</pre>
     <ul>
       <li><a href="https://github.com/SharedCode/joltrin/blob/master/docs/AGENT_BARRIER_TESTS.md" target="_blank" rel="noopener noreferrer">Barrier test results</a><span>Runs with real agents, what they show, and what they do not.</span></li>
       <li><a href="https://github.com/SharedCode/joltrin/blob/master/docs/AGENT_PROTOCOLS.md" target="_blank" rel="noopener noreferrer">Agent protocols</a><span>MCP, A2A, memory, and your own runbooks.</span></li>
+      <li><a href="https://github.com/SharedCode/joltrin/blob/master/docs/KUBERNETES_GATE.md" target="_blank" rel="noopener noreferrer">Kubernetes admission gate</a><span>The barrier in front of kubectl delete, with manifests and limits.</span></li>
       <li><a href="https://github.com/SharedCode/joltrin/blob/master/docs/MCP_A2A_AND_VERIFICATION_ENGINE.md" target="_blank" rel="noopener noreferrer">Verification engine</a><span>How the check works and what it is not.</span></li>
       <li><a href="https://github.com/SharedCode/joltrin/blob/master/docs/GETTING_STARTED.md" target="_blank" rel="noopener noreferrer">Getting started</a><span>From downloading it to building your first program.</span></li>
       <li><a href="https://github.com/SharedCode/joltrin/blob/master/docs/EXAMPLES.md" target="_blank" rel="noopener noreferrer">Examples</a><span>Runnable examples, starting with a quickstart.</span></li>

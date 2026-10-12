@@ -1,0 +1,19 @@
+# Needs cert-manager. The webhook below takes its CA bundle from this Certificate.
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: joltrin-gate-selfsigned
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: joltrin-gate
+spec:
+  secretName: joltrin-gate-tls
+  issuerRef:
+    name: joltrin-gate-selfsigned
+  dnsNames:
+    - joltrin-gate.joltrin-system.svc
+    - joltrin-gate.joltrin-system.svc.cluster.local

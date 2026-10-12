@@ -1,0 +1,28 @@
+# Only objects labelled joltrin.dev/gate=enabled reach the gate, so an outage of
+# the gate cannot block deletes of anything else. failurePolicy Fail means a
+# protected object cannot be deleted while the gate is down.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: joltrin-gate
+  annotations:
+    cert-manager.io/inject-ca-from: joltrin-system/joltrin-gate
+webhooks:
+  - name: gate.joltrin.dev
+    admissionReviewVersions: ["v1"]
+    sideEffects: None
+    failurePolicy: Fail
+    timeoutSeconds: 5
+    objectSelector:
+      matchLabels:
+        joltrin.dev/gate: enabled
+    rules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["DELETE"]
+        resources: ["persistentvolumeclaims"]
+    clientConfig:
+      service:
+        namespace: joltrin-system
+        name: joltrin-gate
+        path: /validate

@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: joltrin-gate-policy
+data:
+  policy.json: |
+    {
+      "rules": [
+        {"resource": "persistentvolumeclaims", "operation": "DELETE", "workflow": "db-maintenance", "step": "drop_prod_db"}
+      ]
+    }

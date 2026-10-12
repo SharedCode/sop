@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: joltrin-gate
+spec:
+  selector:
+    app.kubernetes.io/name: joltrin-gate
+  ports:
+    - name: https
+      port: 443
+      targetPort: https
