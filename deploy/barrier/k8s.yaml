@@ -1,0 +1,76 @@
+# Self-hosted verification barrier over MCP streamable HTTP, for one team.
+#
+# Single tenant, single replica. Runbook and trace state live in memory, so a
+# restart forgets traces, which can only make the barrier stricter. Do not scale
+# past one replica: each replica would hold its own traces.
+#
+# Create the token first, with at least 16 characters:
+#   kubectl create secret generic joltrin-barrier --from-literal=token="$(openssl rand -hex 24)"
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: joltrin-barrier
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: joltrin-barrier
+  template:
+    metadata:
+      labels:
+        app: joltrin-barrier
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: barrier
+          image: joltrin-barrier:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8088
+          env:
+            - name: SOP_MCP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: joltrin-barrier
+                  key: token
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8088
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8088
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: joltrin-barrier
+spec:
+  selector:
+    app: joltrin-barrier
+  ports:
+    - port: 8088
+      targetPort: 8088
