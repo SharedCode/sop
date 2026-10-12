@@ -56,14 +56,14 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header className="border-b border-dark-800 bg-dark-950/80 backdrop-blur-md sticky top-0 z-40">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2 sm:gap-4">
         
         {/* Brand Logo & Title */}
-        <div className="flex items-center space-x-3 flex-shrink-0">
+        <div className="flex items-center space-x-3 min-w-0">
           <img src="./logo-mark.png" alt="Joltrin" className="w-9 h-9 object-contain flex-shrink-0" width={36} height={36} />
-          <div className="flex-shrink-0">
-            <div className="flex items-center space-x-2">
-              <span className="font-extrabold tracking-tight text-white text-base sm:text-lg whitespace-nowrap leading-none">JOLTRIN ARENA</span>
+          <div className="min-w-0">
+            <div className="flex items-center space-x-2 min-w-0">
+              <span className="font-extrabold tracking-tight text-white text-base sm:text-lg truncate leading-none">JOLTRIN ARENA</span>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-brand-500/10 border border-brand-500/30 text-brand-400 font-mono font-semibold uppercase whitespace-nowrap hidden sm:inline-block">
                 Interactive Sim
               </span>
@@ -134,7 +134,7 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Action Controls & External Links */}
-        <div className="flex items-center space-x-2.5">
+        <div className="flex items-center space-x-1.5 sm:space-x-2.5 flex-shrink-0">
 
           {/* Command Palette Trigger */}
           <button

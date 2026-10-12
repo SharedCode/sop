@@ -82,6 +82,11 @@
     .log-line { animation: fadeIn 0.2s ease; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
   </style>
+  <style>
+    /* Footer links are standalone targets, keep them at least 24px tall. */
+    footer ul a { display: inline-block; padding-block: .3rem; }
+    footer ul a.flex { display: flex; }
+  </style>
 </head>
 <body class="font-sans antialiased selection:bg-brand-500 selection:text-black min-h-screen flex flex-col">
 
