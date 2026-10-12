@@ -10,12 +10,14 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/mail"
 	"net/url"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 )
@@ -851,31 +853,77 @@ func (s *DefaultBillingService) SetSubscription(ctx context.Context, sub *Subscr
 	return nil
 }
 
-// SubmitEnterpriseInquiry records a custom enterprise deployment inquiry.
+// Limits for the public enterprise inquiry form. The route takes input from
+// anyone, so every field is bounded and the number of stored inquiries is
+// capped, which keeps a flood of submissions from filling memory or disk.
+const (
+	maxStoredInquiries   = 10000
+	maxInquiryShortField = 200
+	maxInquiryLongField  = 5000
+	maxInquiryEmail      = 254
+)
+
+var (
+	// ErrInvalidInquiry wraps every validation failure, so a caller can show
+	// the reason to the person who sent the form and treat anything else as
+	// an internal error.
+	ErrInvalidInquiry = errors.New("governance/billing: invalid inquiry")
+	// ErrInquiryLimit means the store already holds maxStoredInquiries.
+	ErrInquiryLimit = errors.New("governance/billing: inquiry intake is full")
+)
+
+func validateInquiry(inq *EnterpriseInquiry) error {
+	addr, err := mail.ParseAddress(inq.Email)
+	if inq.Email == "" || err != nil || addr.Address != inq.Email || len(inq.Email) > maxInquiryEmail {
+		return fmt.Errorf("%w: a valid email address is required", ErrInvalidInquiry)
+	}
+	short := map[string]string{
+		"name": inq.Name, "company": inq.Company, "role": inq.Role, "company_size": inq.CompanySize,
+		"team_size": inq.TeamSize, "tier": inq.Tier, "approx_agents": inq.ApproxAgents,
+		"website": inq.Website, "idp": inq.IDP, "deployment": inq.Deployment,
+	}
+	for name, v := range short {
+		if utf8.RuneCountInString(v) > maxInquiryShortField {
+			return fmt.Errorf("%w: %s is longer than %d characters", ErrInvalidInquiry, name, maxInquiryShortField)
+		}
+	}
+	for name, v := range map[string]string{"use_cases": inq.UseCases, "message": inq.Message} {
+		if utf8.RuneCountInString(v) > maxInquiryLongField {
+			return fmt.Errorf("%w: %s is longer than %d characters", ErrInvalidInquiry, name, maxInquiryLongField)
+		}
+	}
+	return nil
+}
+
+// SubmitEnterpriseInquiry records a custom enterprise deployment inquiry. The
+// ID, status and time are always set here: whatever the caller put in those
+// fields is ignored, so a submission can never replace an existing inquiry.
 func (s *DefaultBillingService) SubmitEnterpriseInquiry(ctx context.Context, inq *EnterpriseInquiry) (*EnterpriseInquiry, error) {
 	if inq == nil {
-		return nil, errors.New("governance/billing: inquiry cannot be nil")
+		return nil, fmt.Errorf("%w: inquiry cannot be nil", ErrInvalidInquiry)
 	}
-	if inq.Email == "" {
-		return nil, errors.New("governance/billing: email is required for enterprise contact")
+	if err := validateInquiry(inq); err != nil {
+		return nil, err
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if inq.ID == "" {
-		inq.ID = "inq_" + uuid.NewString()[:8]
+	if len(s.inquiries) >= maxStoredInquiries {
+		return nil, ErrInquiryLimit
 	}
-	inq.Status = "new"
-	inq.CreatedAt = time.Now().UTC()
+	saved := *inq
+	saved.ID = "inq_" + uuid.NewString()
+	saved.Status = "new"
+	saved.CreatedAt = time.Now().UTC()
 
-	s.inquiries[inq.ID] = inq
 	if s.store != nil {
-		if err := s.store.PutInquiry(ctx, inq); err != nil {
+		if err := s.store.PutInquiry(ctx, &saved); err != nil {
 			return nil, fmt.Errorf("governance/billing: persist inquiry: %w", err)
 		}
 	}
-	return inq, nil
+	s.inquiries[saved.ID] = &saved
+	return &saved, nil
 }
 
 // ListEnterpriseInquiries retrieves all submitted inquiries.

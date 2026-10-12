@@ -10,14 +10,17 @@ import (
 	"html/template"
 	"io"
 	log "log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/google/uuid"
@@ -417,6 +420,7 @@ func main() {
 	http.HandleFunc("/api/spaces/config", withAuth(handleSaveSpaceConfig))
 	http.HandleFunc("/api/tasks/status", withAuth(handleGetTaskStatus))
 	http.HandleFunc("/api/health", handleHealth)
+	http.HandleFunc("/api/ready", handleReady)
 	http.HandleFunc("/metrics", handleMetrics)
 	// Configuration Endpoints
 	http.HandleFunc("/api/config/save", withAuth(handleSaveConfig))
@@ -500,6 +504,7 @@ func main() {
 	}
 
 	handler = bodySizeLimitMiddleware(handler)
+	handler = securityHeaders(handler)
 	handler = metricsMiddleware(handler)
 
 	// Explicit timeouts: the zero-value http.Server has none, which lets a
@@ -515,8 +520,18 @@ func main() {
 		WriteTimeout:      10 * time.Minute,
 		IdleTimeout:       2 * time.Minute,
 	}
-	if err := srv.ListenAndServe(); err != nil {
+	ln, err := net.Listen("tcp", srv.Addr)
+	if err != nil {
 		log.Error(err.Error())
+		os.Exit(1)
+	}
+	// On SIGTERM, which is how Container Apps stops a revision, drain and
+	// stop instead of dropping requests that are in flight.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := serveUntilDone(ctx, srv, ln, drainDelay, shutdownTimeout); err != nil {
+		log.Error(err.Error())
+		os.Exit(1)
 	}
 }
 
