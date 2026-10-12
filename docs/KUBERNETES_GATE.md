@@ -48,6 +48,19 @@ kubectl -n prod annotate pvc orders-db-data joltrin.dev/trace-id=run-1
 
 Flags: `--policy`, `--runbooks` (your own runbook file, same format as the MCP server), `--tls-cert`, `--tls-key`, `--commit-token-file`, `--addr`, and `--warn-only`. With `--warn-only` every request is allowed and what would have been blocked comes back as an admission warning, so you can see the effect of a policy before it enforces.
 
+## Metrics and audit log
+
+`GET /metrics` serves Prometheus text on the same TLS port as the webhook:
+
+- `joltrin_k8sgate_admission_total{operation, resource, result}` where result is `allowed`, `denied`, `warned` (warn-only mode) or `unmatched` (no rule covers the request). Past 256 distinct label sets, new ones are counted under `other`, so request content cannot grow the series without limit.
+- `joltrin_k8sgate_commit_total{result}` where result is `ok`, `unauthorized`, `conflict`, `rejected` or `disabled`.
+
+Every admission decision also writes one JSON line to stderr (`msg: "admission"`, with `result`, `operation`, `resource`, `trace_id`, `uid` and `reason`). A denied delete therefore leaves a record of which run it belonged to and which state was missing. Alert on a rise in `denied`, and on `commit_total{result="unauthorized"}`, which means something is calling the commit endpoint with the wrong token.
+
+Prometheus has to scrape over HTTPS. With the Prometheus Operator that is a `ServiceMonitor` with a `tlsConfig` for the gate's certificate authority. This repository does not ship one.
+
+`deploy/k8s-gate/networkpolicy.yaml` allows ingress on 8443 only and denies all egress, since the gate reads its runbooks and policy from mounted files. The manifest builds with `kubectl kustomize`. Enforcement was not tested, because it depends on the cluster's network plugin.
+
 ## What was checked
 
 The package has unit tests for each behavior above. The manifests and the webhook were also run against a real API server (kind, with cert-manager):

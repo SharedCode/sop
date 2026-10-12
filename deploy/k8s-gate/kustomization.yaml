@@ -8,6 +8,7 @@ resources:
   - deployment.yaml
   - service.yaml
   - webhook.yaml
+  - networkpolicy.yaml
 # The gate keeps recorded steps in memory, so it runs as one replica. A restart
 # forgets them, which only makes the gate stricter: protected deletes are denied
 # until the steps are recorded again.

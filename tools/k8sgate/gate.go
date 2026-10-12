@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
@@ -47,6 +48,8 @@ type Gate struct {
 	policy      Policy
 	commitToken string
 	warnOnly    bool
+	metrics     *metrics
+	log         *slog.Logger
 }
 
 // Option configures a Gate.
@@ -55,6 +58,9 @@ type Option func(*Gate)
 // WithWarnOnly makes the gate allow every request and report what it would
 // have blocked as an admission warning.
 func WithWarnOnly() Option { return func(g *Gate) { g.warnOnly = true } }
+
+// WithLogger sends one structured audit record per admission decision to l.
+func WithLogger(l *slog.Logger) Option { return func(g *Gate) { g.log = l } }
 
 // WithCommitToken requires this bearer token on the commit endpoint.
 func WithCommitToken(token string) Option { return func(g *Gate) { g.commitToken = token } }
@@ -76,7 +82,7 @@ func New(store *runbookstore.Store, p Policy, opts ...Option) (*Gate, error) {
 			return nil, fmt.Errorf("k8sgate: rule %d names step %q, which workflow %q does not have", i, r.Step, r.Workflow)
 		}
 	}
-	g := &Gate{store: store, policy: p}
+	g := &Gate{store: store, policy: p, metrics: newMetrics()}
 	for _, o := range opts {
 		o(g)
 	}
@@ -87,6 +93,7 @@ func New(store *runbookstore.Store, p Policy, opts ...Option) (*Gate, error) {
 func (g *Gate) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, "ok") })
+	mux.HandleFunc("GET /metrics", g.serveMetrics)
 	mux.HandleFunc("POST /validate", g.validate)
 	mux.HandleFunc("POST /commit", g.commit)
 	return mux
@@ -131,20 +138,21 @@ func (g *Gate) validate(w http.ResponseWriter, r *http.Request) {
 	}
 	req := in.Request
 	res := &admissionResult{UID: req.UID, Allowed: true}
+	var traceID string
 	rule, ok := g.match(req)
 	if !ok {
-		g.respond(w, in, res)
+		g.finish(w, in, res, traceID, false)
 		return
 	}
-	traceID := req.OldObject.Metadata.Annotations[TraceAnnotation]
+	traceID = req.OldObject.Metadata.Annotations[TraceAnnotation]
 	if traceID == "" {
 		g.deny(res, "the object has no "+TraceAnnotation+" annotation, so the gate cannot tell which run this "+req.Operation+" belongs to")
-		g.respond(w, in, res)
+		g.finish(w, in, res, traceID, true)
 		return
 	}
 	if err := runbookstore.CheckID("trace id", traceID); err != nil {
 		g.deny(res, err.Error())
-		g.respond(w, in, res)
+		g.finish(w, in, res, traceID, true)
 		return
 	}
 	wf, _ := g.store.Workflow(rule.Workflow)
@@ -157,7 +165,7 @@ func (g *Gate) validate(w http.ResponseWriter, r *http.Request) {
 	if err := wf.CheckSafety(trace, verify.StepID(rule.Step)); err != nil {
 		g.deny(res, err.Error())
 	}
-	g.respond(w, in, res)
+	g.finish(w, in, res, traceID, true)
 }
 
 func (g *Gate) deny(res *admissionResult, msg string) {
@@ -169,6 +177,31 @@ func (g *Gate) deny(res *admissionResult, msg string) {
 	res.Status = &struct {
 		Message string `json:"message"`
 	}{Message: msg}
+}
+
+// finish records the decision in the metrics and the audit log, then replies.
+func (g *Gate) finish(w http.ResponseWriter, in admissionReview, res *admissionResult, traceID string, matched bool) {
+	result, reason := "unmatched", ""
+	if matched {
+		switch {
+		case !res.Allowed:
+			result = "denied"
+			if res.Status != nil {
+				reason = res.Status.Message
+			}
+		case len(res.Warnings) > 0:
+			result, reason = "warned", res.Warnings[0]
+		default:
+			result = "allowed"
+		}
+	}
+	req := in.Request
+	g.metrics.admit(req.Operation, req.Resource.Resource, result)
+	if g.log != nil {
+		g.log.Info("admission", "result", result, "operation", req.Operation,
+			"resource", req.Resource.Resource, "trace_id", traceID, "uid", req.UID, "reason", reason)
+	}
+	g.respond(w, in, res)
 }
 
 func (g *Gate) respond(w http.ResponseWriter, in admissionReview, res *admissionResult) {
@@ -193,42 +226,51 @@ type commitRequest struct {
 
 func (g *Gate) commit(w http.ResponseWriter, r *http.Request) {
 	if g.commitToken == "" {
+		g.metrics.committed("disabled")
 		http.Error(w, "the commit endpoint is disabled: no commit token is configured", http.StatusForbidden)
 		return
 	}
 	got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	if subtle.ConstantTimeCompare([]byte(got), []byte(g.commitToken)) != 1 {
+		g.metrics.committed("unauthorized")
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 	var in commitRequest
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<16)
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		g.metrics.committed("rejected")
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
 	if in.TraceID == "" {
+		g.metrics.committed("rejected")
 		http.Error(w, "trace_id is required", http.StatusBadRequest)
 		return
 	}
 	if err := runbookstore.CheckID("trace_id", in.TraceID); err != nil {
+		g.metrics.committed("rejected")
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	wf, ok := g.store.Workflow(in.Workflow)
 	if !ok {
+		g.metrics.committed("rejected")
 		http.Error(w, "unknown workflow "+strconv.Quote(in.Workflow), http.StatusNotFound)
 		return
 	}
 	if _, ok := wf.Steps[verify.StepID(in.Step)]; !ok {
+		g.metrics.committed("rejected")
 		http.Error(w, "unknown step "+strconv.Quote(in.Step), http.StatusNotFound)
 		return
 	}
 	trace := g.store.TraceFor(in.TraceID)
 	if err := wf.CheckAndCommit(trace, verify.StepID(in.Step)); err != nil {
+		g.metrics.committed("conflict")
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
 	}
+	g.metrics.committed("ok")
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"executed": true, "trace": trace.ExecutedSteps()})
 }
@@ -256,6 +298,7 @@ type Files struct {
 	Policy          string
 	CommitTokenFile string
 	WarnOnly        bool
+	Logger          *slog.Logger
 }
 
 // FromFiles builds a Gate from files.
@@ -298,6 +341,9 @@ func FromFiles(f Files) (*Gate, error) {
 	}
 	if f.WarnOnly {
 		opts = append(opts, WithWarnOnly())
+	}
+	if f.Logger != nil {
+		opts = append(opts, WithLogger(f.Logger))
 	}
 	return New(store, policy, opts...)
 }
