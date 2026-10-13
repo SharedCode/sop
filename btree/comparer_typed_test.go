@@ -37,6 +37,11 @@ func TestTypedComparerMatchesBoxedComparer(t *testing.T) {
 	agree(t, "float32", []float32{-1.5, 0, 0.25, 3e9})
 	agree(t, "float64", []float64{-1.5, 0, 0.25, 3e300})
 	agree(t, "string", []string{"", "a", "ab", "b", "é"})
+	// A key type that is itself an interface can hold a different type per key, so it must keep
+	// the boxed comparer rather than the direct one.
+	agree(t, "any holding ints", []any{3, 1, 2, 1})
+	agree(t, "any holding strings", []any{"b", "a", "c"})
+	agree(t, "named int", []namedInt{3, 1, 2})
 	// Types without a fast path keep the boxed comparer.
 	agree(t, "bytes", [][]byte{nil, []byte("a"), []byte("ab")})
 	agree(t, "time", []time.Time{{}, time.Unix(5, 0), time.Unix(9, 0)})
@@ -53,5 +58,21 @@ func TestTypedComparerDoesNotAllocateForScalars(t *testing.T) {
 	}
 	if n := testing.AllocsPerRun(1000, func() { _ = cs(sa, sb) }); n != 0 {
 		t.Fatalf("string compare allocates %v per call", n)
+	}
+}
+
+type namedInt int
+
+func TestInterfaceKeyTypeDoesNotUseTheDirectComparer(t *testing.T) {
+	if c := scalarComparer[any](1); c == nil {
+		t.Fatal("scalarComparer should still see the int, which is why typedComparerFor must check the key type first")
+	}
+	// With TK=any and mixed dynamic types the comparer must not panic and must match the boxed one.
+	typed := typedComparerFor[any](1)
+	boxed := CoerceComparer(any(1))
+	for _, pair := range [][2]any{{1, "x"}, {"x", 1}, {2.5, 3}} {
+		if got, want := typed(pair[0], pair[1]), boxed(pair[0], pair[1]); got != want {
+			t.Fatalf("typed(%v,%v)=%d, boxed=%d", pair[0], pair[1], got, want)
+		}
 	}
 }
