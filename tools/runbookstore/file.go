@@ -89,6 +89,9 @@ func Load(store *Store, r io.Reader) ([]string, error) {
 	if len(raw) > maxFileBytes {
 		return nil, fmt.Errorf("runbooks: the file is larger than %d MB", maxFileBytes>>20)
 	}
+	if len(bytes.TrimSpace(raw)) == 0 {
+		return nil, fmt.Errorf(`runbooks: the file is empty, expected {"workflows": {"name": {"steps": [...]}}}`)
+	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
 	var doc fileDoc

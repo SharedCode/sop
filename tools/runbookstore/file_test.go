@@ -89,6 +89,7 @@ func asViolation(err error, v **verify.Violation) bool {
 func TestLoad_RefusesBadFiles(t *testing.T) {
 	cases := []struct{ name, doc, want string }{
 		{"not json", `{`, "invalid JSON"},
+		{"empty file", "  \n", "the file is empty"},
 		{"misspelled key", `{"workflows":{"w":{"setps":[]}}}`, "unknown field"},
 		{"no workflows", `{"workflows":{}}`, "no workflows found"},
 		{"empty workflow name", `{"workflows":{"":{"steps":[{"id":"a","establishes":["x"]}]}}}`, "name is empty"},
