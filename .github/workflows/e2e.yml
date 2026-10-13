@@ -8,6 +8,7 @@ on:
     paths:
       - 'demo/**'
       - 'demo-agents/**'
+      - 'demo-btree/**'
       - 'sop-arena/**'
       - 'docs/**'
       - 'tests/**'
@@ -22,6 +23,7 @@ on:
     paths:
       - 'demo/**'
       - 'demo-agents/**'
+      - 'demo-btree/**'
       - 'sop-arena/**'
       - 'docs/**'
       - 'tests/**'
@@ -62,9 +64,11 @@ jobs:
           if [ -f "${GOROOT}/lib/wasm/wasm_exec.js" ]; then
             cp "${GOROOT}/lib/wasm/wasm_exec.js" demo/wasm_exec.js
             cp "${GOROOT}/lib/wasm/wasm_exec.js" demo-agents/wasm_exec.js
+            cp "${GOROOT}/lib/wasm/wasm_exec.js" demo-btree/wasm_exec.js
           elif [ -f "${GOROOT}/misc/wasm/wasm_exec.js" ]; then
             cp "${GOROOT}/misc/wasm/wasm_exec.js" demo/wasm_exec.js
             cp "${GOROOT}/misc/wasm/wasm_exec.js" demo-agents/wasm_exec.js
+            cp "${GOROOT}/misc/wasm/wasm_exec.js" demo-btree/wasm_exec.js
           else
             echo "Error: wasm_exec.js not found in ${GOROOT}" >&2
             exit 1
@@ -78,6 +82,8 @@ jobs:
           (cd demo && GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o sop.wasm .)
           echo "Compiling demo-agents/sop-agents.wasm..."
           (cd demo-agents && GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o sop-agents.wasm .)
+          echo "Compiling demo-btree/arena.wasm..."
+          GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o demo-btree/arena.wasm ./demo-btree/wasm
 
       - name: Setup Node.js Toolchain
         uses: actions/setup-node@v7
