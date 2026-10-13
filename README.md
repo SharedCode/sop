@@ -117,6 +117,8 @@ The first `go install` downloads the Go modules, which took about 15 seconds on 
 
 `setup --apply` registers the server using the binary's full path, which avoids the "Executable not found" failure you get when a folder is not on the `PATH` your agent starts with. It can be run again, for example after an upgrade. Run `setup` without `--apply` to see the commands first.
 
+To see the barrier before you connect an agent, run `sop-mcp-server demo`. It needs no agent and finishes at once. If the binary is not on your `PATH`, use the full path you installed it to, such as `$HOME/.joltrin/bin/sop-mcp-server demo`.
+
 Then tell your agent: "Use the joltrin tools to run `drop_prod_db` on workflow `db-maintenance` with trace id `t1`." The server refuses until `take_backup` and `validate_backup` have run in that trace, whatever the agent claims. A recorded run with real agents, and what it does not prove, is in [docs/AGENT_BARRIER_TESTS.md](docs/AGENT_BARRIER_TESTS.md). The same check also gates an A2A agent, described in [docs/AGENT_PROTOCOLS.md](docs/AGENT_PROTOCOLS.md).
 
 ### Memory and your own runbooks
