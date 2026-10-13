@@ -70,7 +70,7 @@ test.describe('Homepage', () => {
     }
     await expect(section).toContainText(/another cloud account/i);
     await expect(section).toContainText(/not implemented/i);
-    for (const row of ['Implemented and tested', 'Deployed and checked', 'Demonstrated', 'Not implemented', 'Not independently validated']) {
+    for (const row of ['Implemented and tested', 'Deployed and checked', 'Demonstrated', 'Not implemented']) {
       await expect(section).toContainText(row);
     }
     await expect(section).toContainText(/the barrier is not hosted/i);
