@@ -432,3 +432,42 @@ func IsPrimitive[TK any]() bool {
 		return false
 	}
 }
+
+// typedComparerFor returns the comparer the B-tree uses when no explicit one was given. For the
+// built-in ordered types it compares the values directly, which avoids boxing each key into an
+// interface on every comparison. For every other key type it falls back to CoerceComparer, so
+// the ordering is the same as before.
+func typedComparerFor[TK Ordered](sample TK) ComparerFunc[TK] {
+	switch any(sample).(type) {
+	case int:
+		return func(a, b TK) int { x, _ := any(a).(int); y, _ := any(b).(int); return cmp.Compare(x, y) }
+	case int8:
+		return func(a, b TK) int { x, _ := any(a).(int8); y, _ := any(b).(int8); return cmp.Compare(x, y) }
+	case int16:
+		return func(a, b TK) int { x, _ := any(a).(int16); y, _ := any(b).(int16); return cmp.Compare(x, y) }
+	case int32:
+		return func(a, b TK) int { x, _ := any(a).(int32); y, _ := any(b).(int32); return cmp.Compare(x, y) }
+	case int64:
+		return func(a, b TK) int { x, _ := any(a).(int64); y, _ := any(b).(int64); return cmp.Compare(x, y) }
+	case uint:
+		return func(a, b TK) int { x, _ := any(a).(uint); y, _ := any(b).(uint); return cmp.Compare(x, y) }
+	case uint8:
+		return func(a, b TK) int { x, _ := any(a).(uint8); y, _ := any(b).(uint8); return cmp.Compare(x, y) }
+	case uint16:
+		return func(a, b TK) int { x, _ := any(a).(uint16); y, _ := any(b).(uint16); return cmp.Compare(x, y) }
+	case uint32:
+		return func(a, b TK) int { x, _ := any(a).(uint32); y, _ := any(b).(uint32); return cmp.Compare(x, y) }
+	case uint64:
+		return func(a, b TK) int { x, _ := any(a).(uint64); y, _ := any(b).(uint64); return cmp.Compare(x, y) }
+	case uintptr:
+		return func(a, b TK) int { x, _ := any(a).(uintptr); y, _ := any(b).(uintptr); return cmp.Compare(x, y) }
+	case float32:
+		return func(a, b TK) int { x, _ := any(a).(float32); y, _ := any(b).(float32); return cmp.Compare(x, y) }
+	case float64:
+		return func(a, b TK) int { x, _ := any(a).(float64); y, _ := any(b).(float64); return cmp.Compare(x, y) }
+	case string:
+		return func(a, b TK) int { x, _ := any(a).(string); y, _ := any(b).(string); return cmp.Compare(x, y) }
+	}
+	boxed := CoerceComparer(sample)
+	return func(a, b TK) int { return boxed(a, b) }
+}
