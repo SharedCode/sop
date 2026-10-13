@@ -68,7 +68,7 @@ type fileDoc struct {
 func LoadFile(store *Store, path string) ([]string, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("runbooks: %w", err)
+		return nil, err
 	}
 	defer f.Close()
 	names, err := Load(store, f)

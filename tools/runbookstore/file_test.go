@@ -163,8 +163,9 @@ func TestLoadFile(t *testing.T) {
 		t.Fatalf("names=%v err=%v", names, err)
 	}
 
-	if _, err := LoadFile(New(), filepath.Join(dir, "missing.json")); err == nil {
-		t.Error("a missing file must be an error")
+	_, err = LoadFile(New(), filepath.Join(dir, "missing.json"))
+	if err == nil || !strings.Contains(err.Error(), "missing.json") || strings.Contains(err.Error(), "runbooks:") {
+		t.Errorf("a missing file must be an error that names the file, got %v", err)
 	}
 
 	bad := filepath.Join(dir, "bad.json")
