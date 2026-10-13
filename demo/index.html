@@ -136,6 +136,7 @@
       { label: 'Pricing', hint: 'section', action: () => location.hash = '#pricing' },
       { label: 'Enterprise', hint: 'section', action: () => location.hash = '#enterprise' },
       { label: 'Joltrin Arena', hint: 'go to', action: () => location.href = './arena/' },
+      { label: 'Joltrin Arena: B-tree challenge', hint: 'go to', action: () => location.href = './btree/' },
       { label: 'Agent Verification Barrier', hint: 'go to', action: () => location.href = './agents/' },
       { label: 'GitHub Repository', hint: 'external', action: () => window.open('https://github.com/SharedCode/joltrin', '_blank', 'noopener') },
     ];
@@ -309,6 +310,9 @@
         <a href="./arena/" class="px-2.5 py-1 rounded-lg bg-dark-800 hover:bg-dark-700 text-slate-300 border border-dark-700 transition flex items-center space-x-1">
           <span>Arena</span>
         </a>
+        <a href="./btree/" class="px-2.5 py-1 rounded-lg bg-dark-800 hover:bg-dark-700 text-slate-300 border border-dark-700 transition flex items-center space-x-1">
+          <span>B-tree game</span>
+        </a>
         <a href="./agents/" class="px-2.5 py-1 rounded-lg bg-dark-800 hover:bg-dark-700 text-slate-300 border border-dark-700 transition flex items-center space-x-1">
           <span>Agents</span>
         </a>
@@ -378,6 +382,7 @@
       <a href="#durable-memory" onclick="closeMobileMenu()" class="block px-3 py-2 rounded-lg text-slate-300 hover:text-white hover:bg-dark-800 transition">Memory</a>
       <a href="#under-the-hood" onclick="closeMobileMenu()" class="block px-3 py-2 rounded-lg text-slate-300 hover:text-white hover:bg-dark-800 transition">Engine</a>
       <a href="./arena/" class="block px-3 py-2 rounded-lg text-slate-300 hover:text-white hover:bg-dark-800 transition">Arena</a>
+      <a href="./btree/" class="block px-3 py-2 rounded-lg text-slate-300 hover:text-white hover:bg-dark-800 transition">B-tree game</a>
       <a href="./agents/" class="block px-3 py-2 rounded-lg text-slate-300 hover:text-white hover:bg-dark-800 transition">Agents</a>
       <a href="./docs/" class="block px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-dark-800 transition">Docs</a>
       <a href="#pricing" onclick="closeMobileMenu()" class="block px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-dark-800 transition">Pricing</a>
@@ -490,7 +495,7 @@
     </section>
 
     <!-- Three live experiences, right after the hero -->
-    <section id="live-experiences" aria-label="Live experiences" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-12">
+    <section id="live-experiences" aria-label="Live experiences" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-12">
       <a href="#under-the-hood" class="p-5 rounded-2xl bg-dark-900 hover:bg-dark-850 border border-brand-500/40 hover:border-brand-500/70 transition flex flex-col justify-between group">
         <div>
           <div class="flex items-center space-x-2 text-brand-400 font-bold text-sm mb-1.5">
@@ -518,6 +523,22 @@
           </p>
         </div>
         <div class="pt-3 text-[11px] text-slate-500 group-hover:text-accent-cyan font-mono">Open the simulation →</div>
+      </a>
+
+      <a href="./btree/" class="p-5 rounded-2xl bg-dark-900 hover:bg-dark-850 border border-dark-700 hover:border-accent-amber/50 transition flex flex-col justify-between group">
+        <div>
+          <div class="flex items-center justify-between text-white group-hover:text-accent-amber font-bold text-sm mb-1.5">
+            <div class="flex items-center space-x-2">
+              <i data-lucide="trophy" class="w-4 h-4 text-accent-amber"></i>
+              <span>Joltrin Arena: B-tree game</span>
+            </div>
+            <span class="text-xs text-slate-500 group-hover:text-accent-amber font-mono">Play →</span>
+          </div>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            Guess how fast the real B-tree is, then run it in your browser and see how close you got. Four short levels, measured on your device.
+          </p>
+        </div>
+        <div class="pt-3 text-[11px] text-slate-500 group-hover:text-accent-amber font-mono">About three minutes →</div>
       </a>
 
       <a href="./agents/" class="p-5 rounded-2xl bg-dark-900 hover:bg-dark-850 border border-dark-700 hover:border-accent-violet/50 transition flex flex-col justify-between group">
@@ -1262,6 +1283,10 @@ Error from server: admission webhook "gate.joltrin.dev" denied the request: step
           <p class="text-slate-300 text-sm mt-1">
             Stress-test the Go B-Tree engine directly on your CPU. Executes thousands of concurrent insertions, node splits, and key queries in raw WebAssembly.
           </p>
+          <p class="text-sm mt-3">
+            <a href="./btree/" class="text-accent-violet hover:text-purple-300 font-semibold underline underline-offset-2">Play the Joltrin Arena B-tree challenge</a>
+            <span class="text-slate-400"> to guess first, then run four short scenarios and see where the tree speeds up and where it stops.</span>
+          </p>
         </div>
 
         <!-- Benchmark Controls -->
@@ -1790,6 +1815,7 @@ Error from server: admission webhook "gate.joltrin.dev" denied the request: step
         <ul class="space-y-2 text-xs font-mono">
           <li><a href="./" class="hover:text-white transition text-brand-400">Technical demo</a></li>
           <li><a href="./arena/" class="hover:text-white transition">Arena (simulation)</a></li>
+          <li><a href="./btree/" class="hover:text-white transition">B-tree game</a></li>
           <li><a href="./agents/" class="hover:text-white transition">Agent verification barrier</a></li>
           <li><a href="#pricing" class="hover:text-white transition">Pricing</a></li>
           <li><a href="#enterprise" class="hover:text-white transition">Enterprise contact</a></li>

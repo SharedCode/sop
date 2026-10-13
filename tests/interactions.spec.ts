@@ -310,7 +310,8 @@ test.describe('Critical Interactive Features Suite', () => {
     await expect(agentsOverlay).toBeVisible();
     const agentsInput = page.locator('#cmdk-input');
     await agentsInput.fill('arena');
-    await expect(page.getByRole('button', { name: /joltrin arena/i })).toBeVisible();
+    // 'arena' now matches both games, the cluster Arena first, then the B-tree challenge.
+    await expect(page.getByRole('button', { name: /joltrin arena/i }).first()).toBeVisible();
     await agentsInput.press('Enter');
     await expect(page).toHaveURL(/.*\/arena\/?/);
 

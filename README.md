@@ -75,6 +75,7 @@ Or skip the install. These run in your browser with no backend:
 | :--- | :--- |
 | [Agent barrier](https://joltrinhq.com/agents/) | Try to drop a database before the backup is validated and watch the barrier refuse. It runs the real checks, compiled to WebAssembly. |
 | [Technical demo](https://joltrinhq.com/) | Run ACID transactions, vector search, and an agent checkpoint resume on the WASM build of the engine. |
+| [Joltrin Arena, B-tree challenge](https://joltrinhq.com/btree/) | Guess, then run four short scenarios on the real in-memory B-tree compiled to WebAssembly. Numbers are measured on your device, and the page states what they do not show. |
 | [Arena](https://joltrinhq.com/arena/) | Crash storage nodes and spike load in a cluster simulation. It illustrates the concepts, it is not a live cluster. |
 
 ## Connect it to an MCP agent

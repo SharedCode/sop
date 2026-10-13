@@ -118,12 +118,13 @@ test.describe('Homepage', () => {
     await expect(section.getByRole('link', { name: 'Source and setup' })).toHaveAttribute('href', /examples\/langgraph_agent$/);
   });
 
-  test('three live experiences are linked right after the hero', async ({ page }) => {
+  test('four live experiences are linked right after the hero', async ({ page }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     const strip = page.locator('#live-experiences');
-    await expect(strip.locator('a')).toHaveCount(3);
+    await expect(strip.locator('a')).toHaveCount(4);
     await expect(strip.locator('a[href="#under-the-hood"]')).toBeVisible();
     await expect(strip.locator('a[href="./arena/"]')).toBeVisible();
+    await expect(strip.locator('a[href="./btree/"]')).toBeVisible();
     await expect(strip.locator('a[href="./agents/"]')).toBeVisible();
   });
 
