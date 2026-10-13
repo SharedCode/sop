@@ -24,7 +24,7 @@ Joltrin (formerly SOP) is an open-source Go library that checks an AI agent's ac
 
 <p align="center">
   <a href="https://youtu.be/WZbz868nTi4">
-    <img src="docs/assets/joltrin-demo.gif" alt="Joltrin demo. Click to watch the video." width="760" />
+    <img src="https://img.youtube.com/vi/WZbz868nTi4/maxresdefault.jpg" alt="Joltrin demo video. Click to watch it on YouTube." width="760" />
   </a>
 </p>
 
