@@ -73,23 +73,47 @@ Now that your server is running, you can write code to interact with it. SOP is 
     ```go
     import (
         "context"
+        "log"
+
         "github.com/sharedcode/joltrin/v5"
         "github.com/sharedcode/joltrin/v5/database"
     )
 
-    // Open Database (Standalone)
-    db, _ := database.Open(sop.DatabaseOptions{
-        Type: sop.Standalone, 
-        StoresFolders: []string{"./data"},
-    })
+    func run(ctx context.Context) error {
+        // Open Database (Standalone)
+        opts, err := database.ValidateOptions(sop.DatabaseOptions{
+            Type:          sop.Standalone,
+            StoresFolders: []string{"./data"},
+        })
+        if err != nil {
+            return err
+        }
 
-    // Transaction & Store
-    tx, _ := db.BeginTransaction(ctx, sop.ForWriting)
-    store, _ := tx.GetStore("users")
+        // Transaction & Store
+        tx, err := database.BeginTransaction(ctx, opts, sop.ForWriting)
+        if err != nil {
+            return err
+        }
+        // Roll back if anything below fails before Commit.
+        defer tx.Rollback(ctx)
 
-    // Add Item
-    store.Add(ctx, "user_999", "Alice")
-    tx.Commit(ctx)
+        store, err := database.NewBtree[string, string](ctx, opts, "users", tx, nil)
+        if err != nil {
+            return err
+        }
+
+        // Add Item
+        if _, err := store.Add(ctx, "user_999", "Alice"); err != nil {
+            return err
+        }
+        return tx.Commit(ctx)
+    }
+
+    func main() {
+        if err := run(context.Background()); err != nil {
+            log.Fatal(err)
+        }
+    }
     ```
 
 ### Python
