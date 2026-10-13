@@ -35,8 +35,10 @@ jobs:
           [ -f "$src" ] || src="${GOROOT}/misc/wasm/wasm_exec.js"
           cp "$src" demo/wasm_exec.js
           cp "$src" demo-agents/wasm_exec.js
+          cp "$src" demo-btree/wasm_exec.js
           (cd demo && GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o sop.wasm .)
           (cd demo-agents && GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o sop-agents.wasm .)
+          GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o demo-btree/arena.wasm ./demo-btree/wasm
 
       - uses: actions/setup-node@v7
         with:
@@ -53,7 +55,7 @@ jobs:
       - name: Check the page stylesheets are up to date
         run: |
           scripts/build-css.sh
-          git diff --exit-code demo/tailwind.css demo-agents/tailwind.css
+          git diff --exit-code demo/tailwind.css demo-agents/tailwind.css demo-btree/tailwind.css
 
       - name: Assemble the site and check every referenced file
         run: scripts/assemble-site.sh _site
