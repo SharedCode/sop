@@ -346,6 +346,16 @@ test.describe('Critical Interactive Features Suite', () => {
     await expect(page.locator('#agent-prompt-input')).toHaveAttribute('aria-label', 'Agent task');
     await expect(page.locator('#cmdk-input')).toHaveAttribute('aria-label', 'Jump to a section or page');
   });
+
+  test('Batch size buttons report the selected count with aria-pressed', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await page.locator('#btn-bench-tab').click();
+    const pressed = page.getByRole('group', { name: 'Batch Operations Count' });
+    await expect(pressed.getByRole('button', { name: '5,000', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await pressed.getByRole('button', { name: '15,000', exact: true }).click();
+    await expect(pressed.getByRole('button', { name: '15,000', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(pressed.getByRole('button', { name: '5,000', exact: true })).toHaveAttribute('aria-pressed', 'false');
+  });
 });
 
 test.describe('Arena touch targets on a phone', () => {
