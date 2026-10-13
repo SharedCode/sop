@@ -436,6 +436,17 @@
       </div>
     </div>
 
+    <!-- Missions -->
+    <div id="missions" class="bg-dark-850 border border-dark-700 rounded-2xl p-6 mb-6">
+      <div class="flex flex-wrap items-baseline justify-between gap-2 mb-1">
+        <h2 class="font-bold text-white flex items-center space-x-2"><i data-lucide="flag" class="w-4 h-4 text-accent-amber"></i><span>Four missions</span></h2>
+        <span id="missions-score" class="text-xs font-mono text-slate-400" aria-live="polite">0 of 4 done</span>
+      </div>
+      <p class="text-xs text-slate-400 mb-4">Each one is checked against the real barrier's answer, not against anything pretend. Clearing them is saved in this browser only.</p>
+      <ul id="mission-list" class="grid sm:grid-cols-2 gap-2 text-sm"></ul>
+      <p id="mission-note" class="mt-3 text-xs text-brand-400 min-h-[1rem]" aria-live="polite"></p>
+    </div>
+
     <!-- Execution log -->
     <div class="bg-dark-850 border border-dark-700 rounded-2xl p-6 mb-10">
       <div class="flex items-center justify-between mb-3">
@@ -768,10 +779,58 @@ curl localhost:8087/.well-known/agent-card.json</pre>
         log(`<span class="text-brand-400">→ execute_step(${id}) ... committed</span>`);
       }
       renderSteps(res.trace);
+      afterStep(id, res);
+    }
+
+    // ---- missions: judged from the barrier's real answers ----
+    const MISSIONS = [
+      { id: 'blocked', title: 'Get blocked', hint: 'Try Drop Prod DB first and read why it is refused.' },
+      { id: 'otherrule', title: 'Hit the other wall', hint: 'Try Validate Backup before any backup exists.' },
+      { id: 'finish', title: 'Finish the job', hint: 'Take the backup, validate it, then drop.' },
+      { id: 'clean', title: 'Clean run', hint: 'Reset, then do all three in order with zero blocks.' },
+    ];
+    const MKEY = 'joltrin-agents-missions-v1';
+    let missionsDone = {};
+    let blocksSinceReset = 0;
+    try { missionsDone = JSON.parse(localStorage.getItem(MKEY)) || {}; } catch (e) { missionsDone = {}; }
+
+    function renderMissions() {
+      const ul = document.getElementById('mission-list');
+      if (!ul) return;
+      ul.innerHTML = MISSIONS.map((m) => {
+        const d = !!missionsDone[m.id];
+        return `<li class="rounded-lg border px-3 py-2 ${d ? 'border-brand-500/50 bg-brand-500/10' : 'border-dark-700 bg-dark-900'}">
+          <span class="font-semibold ${d ? 'text-brand-400' : 'text-slate-200'}">${d ? 'Done: ' : ''}${m.title}</span>
+          <span class="block text-xs text-slate-400">${m.hint}</span></li>`;
+      }).join('');
+      const n = MISSIONS.filter((m) => missionsDone[m.id]).length;
+      document.getElementById('missions-score').textContent = n + ' of ' + MISSIONS.length + ' done';
+    }
+
+    function completeMission(id) {
+      if (missionsDone[id]) return;
+      missionsDone[id] = true;
+      try { localStorage.setItem(MKEY, JSON.stringify(missionsDone)); } catch (e) {}
+      const m = MISSIONS.filter((x) => x.id === id)[0];
+      const left = MISSIONS.filter((x) => !missionsDone[x.id]).length;
+      document.getElementById('mission-note').textContent = 'Mission cleared: ' + m.title + '.' + (left === 0 ? ' That is all four. The barrier did the hard part.' : '');
+      renderMissions();
+    }
+
+    function afterStep(id, res) {
+      if (res.blocked) {
+        blocksSinceReset++;
+        if (id === 'drop_prod_db') completeMission('blocked');
+        if (id === 'validate_backup') completeMission('otherrule');
+      } else if (res.trace.includes('drop_prod_db')) {
+        completeMission('finish');
+        if (blocksSinceReset === 0) completeMission('clean');
+      }
     }
 
     function resetTrace() {
       if (!ready) return;
+      blocksSinceReset = 0;
       const res = JSON.parse(sopAgentsReset());
       document.getElementById('exec-log').innerHTML = '<div class="text-slate-500">// trace reset</div>';
       renderSteps(res.trace);
@@ -1047,6 +1106,8 @@ curl localhost:8087/.well-known/agent-card.json</pre>
 
       form.reset();
     }
+  
+    renderMissions();
   </script>
 </body>
 </html>
