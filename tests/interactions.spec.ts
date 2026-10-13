@@ -339,4 +339,11 @@ test.describe('Critical Interactive Features Suite', () => {
     expect(codeText).toContain('git clone https://github.com/SharedCode/joltrin.git');
     expect(codeText).toContain('go run ./examples/verify_barrier');
   });
+
+  test('Demo inputs carry an aria-label, not only a placeholder', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('#vector-query-input')).toHaveAttribute('aria-label', 'Semantic query');
+    await expect(page.locator('#agent-prompt-input')).toHaveAttribute('aria-label', 'Agent task');
+    await expect(page.locator('#cmdk-input')).toHaveAttribute('aria-label', 'Jump to a section or page');
+  });
 });
