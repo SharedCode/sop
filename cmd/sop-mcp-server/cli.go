@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"os"
 	"runtime/debug"
 )
 
@@ -39,6 +40,17 @@ func version() string {
 		return bi.Main.Version
 	}
 	return "dev"
+}
+
+// servingHint tells someone who ran the bare command in a terminal that the
+// server is waiting for a client, not hung. An agent launches it with a pipe on
+// stdin, so it never sees this line, and stdout stays clear for the protocol.
+func servingHint(stdin *os.File, errw io.Writer) {
+	fi, err := stdin.Stat()
+	if err != nil || fi.Mode()&os.ModeCharDevice == 0 {
+		return
+	}
+	fmt.Fprintln(errw, "sop-mcp-server: waiting for an MCP client on stdin. Press Ctrl-C to stop, or run \"sop-mcp-server help\" for the commands.")
 }
 
 // dispatch runs a command and reports the exit code. serve is true when the

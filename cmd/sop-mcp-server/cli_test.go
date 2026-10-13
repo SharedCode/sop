@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 )
@@ -20,6 +21,29 @@ func TestNoArgumentsAndTheStdioAliasesServe(t *testing.T) {
 		if !serve || code != 0 || out != "" || errw != "" {
 			t.Errorf("%v: serve=%v code=%d out=%q err=%q, want a silent start", args, serve, code, out, errw)
 		}
+	}
+}
+
+func TestServingHintOnlyWhenStdinIsATerminal(t *testing.T) {
+	pipe, err := os.CreateTemp(t.TempDir(), "stdin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pipe.Close()
+	var e bytes.Buffer
+	servingHint(pipe, &e)
+	if e.Len() != 0 {
+		t.Errorf("a regular file stdin (an agent's pipe) got a hint: %q", e.String())
+	}
+
+	terminal, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer terminal.Close()
+	servingHint(terminal, &e)
+	if !strings.Contains(e.String(), "waiting for an MCP client") || !strings.Contains(e.String(), "sop-mcp-server help") {
+		t.Errorf("a character device stdin got no hint: %q", e.String())
 	}
 }
 

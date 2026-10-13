@@ -115,6 +115,7 @@ func main() {
 		return
 	}
 
+	servingHint(os.Stdin, os.Stderr)
 	if err := server.ServeStdio(mcp); err != nil {
 		fmt.Fprintln(os.Stderr, "sop-mcp-server:", err)
 		os.Exit(1)
