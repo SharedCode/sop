@@ -1532,7 +1532,7 @@ Error from server: admission webhook "gate.joltrin.dev" denied the request: step
         </div>
 
         <!-- Submission Status Banner -->
-        <div id="form-status-alert" class="hidden mb-6 p-4 rounded-xl text-xs"></div>
+        <div id="form-status-alert" role="status" aria-live="polite" class="hidden mb-6 p-4 rounded-xl text-xs"></div>
 
         <!-- Form Component -->
         <form id="interest-form" onsubmit="handleFormSubmit(event)" class="space-y-4">
