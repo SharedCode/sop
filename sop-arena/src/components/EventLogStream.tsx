@@ -44,7 +44,7 @@ export const EventLogStream: React.FC<EventLogStreamProps> = ({ logs, onClearLog
             <button
               key={cat}
               onClick={() => setFilter(cat)}
-              className={`px-2 py-0.5 rounded transition ${
+              className={`px-2 py-1 rounded transition ${
                 filter === cat
                   ? 'bg-brand-500/20 text-brand-400 font-bold border border-brand-500/30'
                   : 'text-slate-400 hover:text-white bg-dark-950 border border-transparent'
@@ -57,7 +57,7 @@ export const EventLogStream: React.FC<EventLogStreamProps> = ({ logs, onClearLog
           {onClearLogs && (
             <button
               onClick={onClearLogs}
-              className="p-1 text-slate-500 hover:text-slate-300 ml-1 transition"
+              className="p-1.5 text-slate-500 hover:text-slate-300 ml-1 transition"
               title="Clear event stream"
             >
               <Trash2 className="w-3 h-3" />
