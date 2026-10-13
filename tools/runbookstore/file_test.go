@@ -89,8 +89,11 @@ func asViolation(err error, v **verify.Violation) bool {
 func TestLoad_RefusesBadFiles(t *testing.T) {
 	cases := []struct{ name, doc, want string }{
 		{"not json", `{`, "invalid JSON"},
+		{"empty file", "  \n", "the file is empty"},
 		{"misspelled key", `{"workflows":{"w":{"setps":[]}}}`, "unknown field"},
+		{"misspelled key names the fields a step takes", `{"workflows":{"w":{"steps":[{"name":"a","establishes":["x"]}]}}}`, "a step takes id, requires and establishes"},
 		{"no workflows", `{"workflows":{}}`, "no workflows found"},
+		{"workflows as a list", `{"workflows":[{"name":"w","steps":[{"id":"a","establishes":["x"]}]}]}`, `"workflows" must be an object keyed by workflow name`},
 		{"empty workflow name", `{"workflows":{"":{"steps":[{"id":"a","establishes":["x"]}]}}}`, "name is empty"},
 		{"no steps", `{"workflows":{"w":{"steps":[]}}}`, "no steps"},
 		{"step without id", `{"workflows":{"w":{"steps":[{"establishes":["x"]}]}}}`, "no id"},
@@ -163,8 +166,9 @@ func TestLoadFile(t *testing.T) {
 		t.Fatalf("names=%v err=%v", names, err)
 	}
 
-	if _, err := LoadFile(New(), filepath.Join(dir, "missing.json")); err == nil {
-		t.Error("a missing file must be an error")
+	_, err = LoadFile(New(), filepath.Join(dir, "missing.json"))
+	if err == nil || !strings.Contains(err.Error(), "missing.json") || strings.Contains(err.Error(), "runbooks:") {
+		t.Errorf("a missing file must be an error that names the file, got %v", err)
 	}
 
 	bad := filepath.Join(dir, "bad.json")

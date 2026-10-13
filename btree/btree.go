@@ -34,7 +34,7 @@ type Btree[TK Ordered, TV any] struct {
 	distributeAction   distributeAction[TK, TV]
 	promoteAction      promoteAction[TK, TV]
 	comparer           ComparerFunc[TK]
-	coercedComparer    func(x, y any) int
+	typedComparer      ComparerFunc[TK]
 }
 
 // currentItemRef contains node ID & item slot index position in the node.
@@ -205,10 +205,10 @@ func (btree *Btree[TK, TV]) compare(a TK, b TK) int {
 	if btree.comparer != nil {
 		return btree.comparer(a, b)
 	}
-	if btree.coercedComparer == nil {
-		btree.coercedComparer = CoerceComparer(a)
+	if btree.typedComparer == nil {
+		btree.typedComparer = typedComparerFor(a)
 	}
-	return btree.coercedComparer(a, b)
+	return btree.typedComparer(a, b)
 }
 
 // Find searches for the key and positions the cursor to the first or exact match depending on firstItemWithKey.
@@ -863,8 +863,10 @@ func (btree *Btree[TK, TV]) isCurrentItemSelected() bool {
 // distribute moves an item from a full node to a sibling with a vacant slot (controller pattern, avoids recursion).
 func (btree *Btree[TK, TV]) distribute(ctx context.Context) error {
 	for btree.distributeAction.sourceNode != nil {
-		log.Debug(fmt.Sprintf("distribute item with key(%v) of node ID(%v) to left(%v)",
-			btree.distributeAction.item.Key, btree.distributeAction.sourceNode.ID, btree.distributeAction.distributeToLeft))
+		if log.Default().Enabled(ctx, log.LevelDebug) {
+			log.Debug(fmt.Sprintf("distribute item with key(%v) of node ID(%v) to left(%v)",
+				btree.distributeAction.item.Key, btree.distributeAction.sourceNode.ID, btree.distributeAction.distributeToLeft))
+		}
 		n := btree.distributeAction.sourceNode
 		btree.distributeAction.sourceNode = nil
 		item := btree.distributeAction.item
@@ -887,7 +889,9 @@ func (btree *Btree[TK, TV]) distribute(ctx context.Context) error {
 // promote promotes a node to a higher-level branch when necessary (controller pattern, avoids recursion).
 func (btree *Btree[TK, TV]) promote(ctx context.Context) {
 	for btree.promoteAction.targetNode != nil {
-		log.Debug(fmt.Sprintf("promote will promote a node with ID %v", btree.promoteAction.targetNode.ID))
+		if log.Default().Enabled(ctx, log.LevelDebug) {
+			log.Debug(fmt.Sprintf("promote will promote a node with ID %v", btree.promoteAction.targetNode.ID))
+		}
 		n := btree.promoteAction.targetNode
 		i := btree.promoteAction.slotIndex
 		btree.promoteAction.targetNode = nil

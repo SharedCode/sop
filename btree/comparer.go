@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"cmp"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/google/uuid"
@@ -431,4 +432,56 @@ func IsPrimitive[TK any]() bool {
 	default:
 		return false
 	}
+}
+
+// typedComparerFor returns the comparer the B-tree uses when no explicit one was given. When the
+// key type is itself one of the built-in ordered types, it compares the values directly, which
+// avoids boxing each key into an interface on every comparison. In that case every key has
+// exactly that type, so the assertions below cannot fail.
+//
+// For every other key type, including interface key types such as any where each key can hold a
+// different dynamic type, it falls back to CoerceComparer so the ordering is the same as before.
+func typedComparerFor[TK Ordered](sample TK) ComparerFunc[TK] {
+	if reflect.TypeFor[TK]().Kind() != reflect.Interface {
+		if c := scalarComparer(sample); c != nil {
+			return c
+		}
+	}
+	boxed := CoerceComparer(sample)
+	return func(a, b TK) int { return boxed(a, b) }
+}
+
+// scalarComparer returns a direct comparer when TK is exactly a built-in ordered type, else nil.
+func scalarComparer[TK Ordered](sample TK) ComparerFunc[TK] {
+	switch any(sample).(type) {
+	case int:
+		return func(a, b TK) int { return cmp.Compare(any(a).(int), any(b).(int)) }
+	case int8:
+		return func(a, b TK) int { return cmp.Compare(any(a).(int8), any(b).(int8)) }
+	case int16:
+		return func(a, b TK) int { return cmp.Compare(any(a).(int16), any(b).(int16)) }
+	case int32:
+		return func(a, b TK) int { return cmp.Compare(any(a).(int32), any(b).(int32)) }
+	case int64:
+		return func(a, b TK) int { return cmp.Compare(any(a).(int64), any(b).(int64)) }
+	case uint:
+		return func(a, b TK) int { return cmp.Compare(any(a).(uint), any(b).(uint)) }
+	case uint8:
+		return func(a, b TK) int { return cmp.Compare(any(a).(uint8), any(b).(uint8)) }
+	case uint16:
+		return func(a, b TK) int { return cmp.Compare(any(a).(uint16), any(b).(uint16)) }
+	case uint32:
+		return func(a, b TK) int { return cmp.Compare(any(a).(uint32), any(b).(uint32)) }
+	case uint64:
+		return func(a, b TK) int { return cmp.Compare(any(a).(uint64), any(b).(uint64)) }
+	case uintptr:
+		return func(a, b TK) int { return cmp.Compare(any(a).(uintptr), any(b).(uintptr)) }
+	case float32:
+		return func(a, b TK) int { return cmp.Compare(any(a).(float32), any(b).(float32)) }
+	case float64:
+		return func(a, b TK) int { return cmp.Compare(any(a).(float64), any(b).(float64)) }
+	case string:
+		return func(a, b TK) int { return cmp.Compare(any(a).(string), any(b).(string)) }
+	}
+	return nil
 }

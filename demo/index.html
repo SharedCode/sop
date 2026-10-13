@@ -398,7 +398,7 @@
     <div class="w-full max-w-lg bg-dark-900 border border-dark-700 rounded-2xl shadow-2xl overflow-hidden">
       <div class="flex items-center px-4 border-b border-dark-800">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-slate-500 shrink-0"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-        <input id="cmdk-input" type="text" placeholder="Jump to a section or page..."
+        <input id="cmdk-input" type="text" aria-label="Jump to a section or page" placeholder="Jump to a section or page..."
                class="w-full bg-transparent px-3 py-3.5 text-sm text-white placeholder-slate-500 focus:outline-none font-mono"
                oninput="cmdkFilter(this.value)" onkeydown="cmdkKeydown(event)" autocomplete="off" />
         <kbd class="text-[10px] text-slate-500 border border-dark-700 rounded px-1.5 py-0.5 font-mono shrink-0">ESC</kbd>
@@ -1246,7 +1246,7 @@ Error from server: admission webhook "gate.joltrin.dev" denied the request: step
         <div class="flex flex-col sm:flex-row gap-3 mb-6">
           <div class="relative flex-grow">
             <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5"></i>
-            <input id="vector-query-input" type="text" value="ACID transaction guarantees and B-Tree storage" placeholder="Enter semantic query..." 
+            <input id="vector-query-input" type="text" aria-label="Semantic query" value="ACID transaction guarantees and B-Tree storage" placeholder="Enter semantic query..."
                    class="w-full bg-dark-950 border border-dark-700 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white font-medium focus:border-accent-cyan focus:outline-none transition" />
           </div>
           <button onclick="triggerVectorSearch()" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-accent-cyan to-blue-500 hover:from-cyan-400 hover:to-blue-400 font-semibold text-xs text-black shadow-lg shadow-cyan-500/20 flex items-center justify-center space-x-2 transition transform active:scale-95">
@@ -1411,7 +1411,7 @@ Error from server: admission webhook "gate.joltrin.dev" denied the request: step
             </div>
 
             <div class="flex flex-col sm:flex-row gap-3 mb-4">
-              <input id="agent-prompt-input" type="text" value="Investigate anomalous latency spike in payment gateway cluster" placeholder="Describe an agent task..."
+              <input id="agent-prompt-input" type="text" aria-label="Agent task" value="Investigate anomalous latency spike in payment gateway cluster" placeholder="Describe an agent task..."
                      class="w-full bg-dark-950 border border-dark-700 rounded-xl px-4 py-2.5 text-sm text-white font-medium focus:border-accent-violet focus:outline-none transition" />
               <button id="agent-start-btn" onclick="agentStartTask()" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-accent-violet to-purple-600 hover:from-purple-500 hover:to-purple-400 font-semibold text-xs text-white shadow-lg shadow-purple-500/20 flex items-center justify-center space-x-2 transition transform active:scale-95 shrink-0">
                 <i data-lucide="play" class="w-4 h-4"></i>
@@ -1557,7 +1557,7 @@ Error from server: admission webhook "gate.joltrin.dev" denied the request: step
         </div>
 
         <!-- Submission Status Banner -->
-        <div id="form-status-alert" class="hidden mb-6 p-4 rounded-xl text-xs"></div>
+        <div id="form-status-alert" role="status" aria-live="polite" class="hidden mb-6 p-4 rounded-xl text-xs"></div>
 
         <!-- Form Component -->
         <form id="interest-form" onsubmit="handleFormSubmit(event)" class="space-y-4">

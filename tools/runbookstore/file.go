@@ -3,6 +3,7 @@ package runbookstore
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -68,7 +69,7 @@ type fileDoc struct {
 func LoadFile(store *Store, path string) ([]string, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("runbooks: %w", err)
+		return nil, err
 	}
 	defer f.Close()
 	names, err := Load(store, f)
@@ -89,10 +90,20 @@ func Load(store *Store, r io.Reader) ([]string, error) {
 	if len(raw) > maxFileBytes {
 		return nil, fmt.Errorf("runbooks: the file is larger than %d MB", maxFileBytes>>20)
 	}
+	if len(bytes.TrimSpace(raw)) == 0 {
+		return nil, fmt.Errorf(`runbooks: the file is empty, expected {"workflows": {"name": {"steps": [...]}}}`)
+	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
 	var doc fileDoc
 	if err := dec.Decode(&doc); err != nil {
+		if strings.HasPrefix(err.Error(), "json: unknown field") {
+			return nil, fmt.Errorf("runbooks: %s; a step takes id, requires and establishes, a safety rule takes name, forbidden and requires, and a reachability rule takes name and target", strings.TrimPrefix(err.Error(), "json: "))
+		}
+		var typeErr *json.UnmarshalTypeError
+		if errors.As(err, &typeErr) && typeErr.Field == "workflows" {
+			return nil, fmt.Errorf(`runbooks: "workflows" must be an object keyed by workflow name, expected {"workflows": {"name": {"steps": [...]}}}`)
+		}
 		return nil, fmt.Errorf("runbooks: invalid JSON: %w", err)
 	}
 	if dec.More() {

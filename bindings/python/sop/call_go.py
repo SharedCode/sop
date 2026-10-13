@@ -24,7 +24,7 @@ try:
     lib = ctypes.CDLL(library_path)
 except OSError as e:
     print(f"Error loading library: {e}")
-    print("Ensure 'libjsondb_<arch><os>.so' (or .dll/.dylib) is in the same directory.")
+    print(f"Ensure 'libjsondb_{ext}' is in the same directory as call_go.py.")
     exit()
 
 # Redis global connection management related.

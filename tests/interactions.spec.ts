@@ -340,4 +340,30 @@ test.describe('Critical Interactive Features Suite', () => {
     expect(codeText).toContain('git clone https://github.com/SharedCode/joltrin.git');
     expect(codeText).toContain('go run ./examples/verify_barrier');
   });
+
+  test('Demo inputs carry an aria-label, not only a placeholder', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('#vector-query-input')).toHaveAttribute('aria-label', 'Semantic query');
+    await expect(page.locator('#agent-prompt-input')).toHaveAttribute('aria-label', 'Agent task');
+    await expect(page.locator('#cmdk-input')).toHaveAttribute('aria-label', 'Jump to a section or page');
+  });
+});
+
+test.describe('Arena touch targets on a phone', () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+
+  test('event log filters, clear, and reset are at least 24px tall', async ({ page }) => {
+    await page.goto('/arena/', { waitUntil: 'domcontentloaded' });
+    await waitForCanvasRendered(page);
+    const controls = [
+      page.getByRole('button', { name: 'FAILOVER', exact: true }),
+      page.getByRole('button', { name: 'Clear event stream' }),
+      page.getByRole('button', { name: 'Reset System Baseline' }),
+    ];
+    for (const control of controls) {
+      await expect(control).toBeVisible();
+      const box = await control.boundingBox();
+      expect(box!.height).toBeGreaterThanOrEqual(24);
+    }
+  });
 });
