@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Joltrin Arena: B-Tree Challenge | Joltrin</title>
+  <meta name="description" content="Guess how fast Joltrin's B-tree is, then run it in your browser and find out. Four short levels on the real Go code compiled to WebAssembly, with the limits stated plainly." />
+  <link rel="canonical" href="https://joltrinhq.com/btree/" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://joltrinhq.com/btree/" />
+  <meta property="og:title" content="Joltrin Arena: B-Tree Challenge | Joltrin" />
+  <meta property="og:description" content="Guess, run, and see where Joltrin's B-tree speeds up, slows down, and where it stops. Measured on your device." />
+  <meta property="og:image" content="https://joltrinhq.com/og-image.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+  <link rel="alternate icon" href="./favicon.ico" />
+  <link rel="preload" href="arena.wasm" as="fetch" type="application/wasm" crossorigin>
+  <link rel="stylesheet" href="./tailwind.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="wasm_exec.js"></script>
+  <style>
+    body { background: #07090E; }
+    .bar-fill { transition: width 0.7s cubic-bezier(.2,.8,.2,1); }
+    .pop { animation: pop 0.45s cubic-bezier(.2,1.4,.4,1); }
+    @keyframes pop { from { transform: scale(0.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    .spin { animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .opt:has(input:checked) { border-color: #34d399; background: rgba(16,185,129,0.10); }
+    .opt:has(input:focus-visible) { outline: 2px solid #34d399; outline-offset: 2px; }
+    a:focus-visible, button:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid #34d399; outline-offset: 2px; }
+    @media (prefers-reduced-motion: reduce) {
+      .bar-fill { transition: none; }
+      .pop, .spin { animation: none; }
+      html { scroll-behavior: auto; }
+    }
+  </style>
+</head>
+<body class="bg-dark-950 text-slate-300 font-sans antialiased">
+  <a href="#game" class="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:bg-dark-900 focus:text-white focus:px-4 focus:py-2 focus:rounded-lg">Skip to the game</a>
+
+  <header class="border-b border-dark-800">
+    <nav class="max-w-5xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between" aria-label="Main">
+      <a href="../" class="flex items-center gap-2 text-white font-bold">
+        <img src="./logo-mark.png" alt="" width="24" height="24" class="rounded" />
+        <span>Joltrin</span>
+      </a>
+      <div class="flex items-center gap-4 text-sm">
+        <a href="../" class="text-slate-400 hover:text-white py-2">Home</a>
+        <a href="../arena/" class="text-slate-400 hover:text-white py-2">Cluster Arena</a>
+        <a href="../agents/" class="text-slate-400 hover:text-white py-2">Agent barrier</a>
+        <a href="../docs/" class="text-slate-400 hover:text-white py-2">Docs</a>
+      </div>
+    </nav>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-4 sm:px-6 py-10 sm:py-14">
+    <!-- Intro -->
+    <section aria-labelledby="title" class="mb-10">
+      <p class="text-xs font-mono text-brand-400 uppercase tracking-wider mb-3">The B-tree challenge · four levels, about three minutes</p>
+      <h1 id="title" class="text-4xl sm:text-5xl font-extrabold text-white tracking-tight mb-4">Joltrin Arena</h1>
+      <p class="text-lg text-slate-300 max-w-2xl mb-3">Guess how fast Joltrin's B-tree is. Then run it and see how close you got.</p>
+      <p class="text-sm text-slate-400 max-w-2xl">The tree is the real Go code from this repository, compiled to WebAssembly and running on your device. Every number below is measured on your machine, in your browser, a few seconds ago. Nothing is sent anywhere.</p>
+      <div class="mt-6 grid sm:grid-cols-3 gap-3 max-w-3xl text-sm">
+        <div class="rounded-xl bg-dark-900 border border-dark-700 p-4"><span class="font-mono text-brand-400 font-bold">1. Guess</span><p class="text-slate-400 mt-1">Pick what you think will happen.</p></div>
+        <div class="rounded-xl bg-dark-900 border border-dark-700 p-4"><span class="font-mono text-brand-400 font-bold">2. Run</span><p class="text-slate-400 mt-1">The real tree does the work and is timed.</p></div>
+        <div class="rounded-xl bg-dark-900 border border-dark-700 p-4"><span class="font-mono text-brand-400 font-bold">3. Learn</span><p class="text-slate-400 mt-1">See the numbers, what they mean, and where they stop meaning anything.</p></div>
+      </div>
+    </section>
+
+    <!-- Progress -->
+    <nav aria-label="Level progress" class="mb-6">
+      <ol id="progress" class="grid grid-cols-2 sm:grid-cols-4 gap-2"></ol>
+    </nav>
+
+    <!-- Engine status -->
+    <div id="status" role="status" aria-live="polite" class="mb-4 text-sm font-mono text-slate-400 flex items-center gap-2">
+      <svg class="w-4 h-4 spin" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="#334155" stroke-width="3"/><path d="M21 12a9 9 0 0 0-9-9" stroke="#34d399" stroke-width="3" stroke-linecap="round"/></svg>
+      <span>Loading the B-tree engine (about 2 MB over the wire)...</span>
+    </div>
+
+    <!-- Game -->
+    <section id="game" aria-labelledby="level-title" class="rounded-2xl bg-dark-900 border border-dark-700 p-4 sm:p-8 mb-12 scroll-mt-6">
+      <div id="level-body"></div>
+    </section>
+
+    <!-- Limits -->
+    <section aria-labelledby="limits-title" class="mb-12">
+      <h2 id="limits-title" class="text-2xl font-bold text-white mb-2">What this is, and what it is not</h2>
+      <p class="text-sm text-slate-400 mb-5 max-w-2xl">A browser run is useful for feeling how a B-tree behaves. It is not a benchmark of the Go library in production.</p>
+      <div class="grid md:grid-cols-2 gap-4">
+        <div class="rounded-xl bg-dark-900 border border-brand-500/30 p-5">
+          <h3 class="font-bold text-white mb-2 text-sm">What you are measuring</h3>
+          <ul class="text-sm text-slate-300 space-y-2 list-disc pl-5">
+            <li>The in-memory B-tree (<code class="font-mono text-brand-400">inmemory.NewBtree</code>) with integer keys and integer values, unique keys.</li>
+            <li>Go compiled to WebAssembly, so it runs slower than native Go would on the same machine.</li>
+            <li>Each result is the median of 3 trials, and each trial repeats the work until it has run for at least 30 ms, so coarse browser clocks stay accurate.</li>
+            <li>Keys come from a fixed seed (42), so the shuffled order is the same on every run.</li>
+          </ul>
+        </div>
+        <div class="rounded-xl bg-dark-900 border border-dark-700 p-5">
+          <h3 class="font-bold text-white mb-2 text-sm">What you are not measuring</h3>
+          <ul class="text-sm text-slate-300 space-y-2 list-disc pl-5">
+            <li>No disk, no transactions, no write-ahead log. The ACID, disk-backed store is a different code path and is benchmarked natively.</li>
+            <li>One thread. There is no concurrency here.</li>
+            <li>Nodes hold up to 8 items. The in-memory tree fixes that size, so you cannot tune it in this arena.</li>
+            <li>Runs are capped at 100,000 keys to keep your browser responsive.</li>
+            <li>Your device, browser, and whatever else is running change the numbers. They are yours, not a guarantee.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- Reproduce -->
+    <section aria-labelledby="repro-title" class="mb-12">
+      <h2 id="repro-title" class="text-2xl font-bold text-white mb-2">Run it natively</h2>
+      <p class="text-sm text-slate-400 mb-4 max-w-2xl">The disk-backed benchmark lives in the repository. These are the documented commands, from <code class="font-mono text-slate-300">docs/BENCHMARKS.md</code>.</p>
+      <pre class="rounded-xl bg-dark-900 border border-dark-700 p-4 text-sm font-mono text-slate-200 overflow-x-auto"><code>go run ./tools/benchmark -count 10000 -slotlength 2000
+go run ./tools/benchmark -count 100000 -slotlength 4000</code></pre>
+      <div class="mt-4 rounded-xl bg-dark-900 border border-dark-700 p-5 text-sm text-slate-300 max-w-3xl">
+        <p class="font-semibold text-white mb-1">Published native reference, not comparable to the numbers above</p>
+        <p class="text-slate-400">From the repository benchmark table: 100,000 items, slot length 2,000, on a 2015 MacBook Pro (dual-core Intel Core i5, 8 GB). It measured 132,805 inserts per second, 136,684 reads per second and 51,817 deletes per second. That run used the in-memory L2 cache with <code class="font-mono">/tmp</code> storage behind full ACID transactions, so it does more work per operation than this arena and ran on different hardware. Do not compare the two.</p>
+      </div>
+    </section>
+
+    <!-- Sandbox + details -->
+    <section aria-labelledby="adv-title" class="mb-12">
+      <h2 id="adv-title" class="text-2xl font-bold text-white mb-2">Optional: poke at it yourself</h2>
+      <details class="rounded-xl bg-dark-900 border border-dark-700 p-5">
+        <summary class="cursor-pointer text-sm font-semibold text-white">Open the sandbox and the raw output</summary>
+        <div class="mt-4 grid sm:grid-cols-3 gap-3 items-end">
+          <label class="block text-xs font-mono text-slate-400">Scenario
+            <select id="sb-scenario" class="mt-1 w-full rounded-lg bg-dark-950 border border-dark-600 text-slate-200 px-3 py-2 text-sm">
+              <option value="basic">Insert and look up</option>
+              <option value="order">Ordered vs shuffled inserts</option>
+              <option value="range">Range scan vs full scan</option>
+            </select>
+          </label>
+          <label class="block text-xs font-mono text-slate-400">Number of keys
+            <select id="sb-n" class="mt-1 w-full rounded-lg bg-dark-950 border border-dark-600 text-slate-200 px-3 py-2 text-sm">
+              <option>100</option><option>1000</option><option selected>10000</option><option>50000</option><option>100000</option>
+            </select>
+          </label>
+          <button id="sb-run" type="button" class="rounded-lg bg-brand-600 hover:bg-brand-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold px-4 py-2 text-sm min-h-[40px]" disabled>Run it</button>
+        </div>
+        <div id="sb-out" class="mt-4" aria-live="polite"></div>
+        <p class="mt-4 text-xs text-slate-400">Raw JSON from the last run:</p>
+        <pre id="raw" class="mt-1 rounded-lg bg-dark-950 border border-dark-800 p-3 text-xs font-mono text-slate-300 overflow-x-auto min-h-[3rem]">No run yet.</pre>
+      </details>
+    </section>
+  </main>
+
+  <footer class="border-t border-dark-800 py-8 text-center text-xs text-slate-400">
+    <p>Open source. <a class="underline hover:text-white" href="https://github.com/SharedCode/joltrin">github.com/SharedCode/joltrin</a> · <a class="underline hover:text-white" href="../">Back to joltrinhq.com</a></p>
+  </footer>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---------- storage (every access guarded; the page works without it) ----------
+  var KEY = 'joltrin-btree-arena-v1';
+  function load() { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { return {}; } }
+  function save(s) { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) {} }
+  var state = load();
+  state.done = state.done || {};
+  state.correct = state.correct || {};
+
+  var reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var ready = false, busy = false;
+
+  // ---------- helpers ----------
+  function $(id) { return document.getElementById(id); }
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]; }); }
+  function fmt(n) { return Math.round(n).toLocaleString('en-US'); }
+  function rate(n) {
+    if (n >= 1e6) return (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + ' million/s';
+    if (n >= 1e3) return Math.round(n / 1e3).toLocaleString('en-US') + ' thousand/s';
+    return fmt(n) + '/s';
+  }
+  function micro(v) { return v < 1 ? v.toFixed(2) + ' µs' : v.toFixed(v < 10 ? 2 : 1) + ' µs'; }
+  // fewest levels a tree needs: with 8 items per node a node fans out to at most 9 children,
+  // so h levels hold at most 9^h - 1 items.
+  function minHeight(n) { var h = 0, cap = 0, p = 1; while (cap < n) { p *= 9; cap = p - 1; h++; } return h; }
+  function oom(x) { return Math.round(Math.log10(x)); }
+  function measure(res, i) { return res.measures[i]; }
+  function perScan(m, itemsPerScan) { return m.millis / (m.ops / itemsPerScan); }
+
+  function runWasm(scenario, n) {
+    return new Promise(function (resolve, reject) {
+      // let the browser paint the "running" state before the thread is busy
+      requestAnimationFrame(function () {
+        setTimeout(function () {
+          try {
+            var res = JSON.parse(window.joltrinBtreeArena(scenario, n));
+            if (res.error) { reject(new Error(res.error)); return; }
+            resolve(res);
+          } catch (e) { reject(e); }
+        }, 30);
+      });
+    });
+  }
+
+  // ---------- levels ----------
+  var LEVELS = [
+    {
+      id: 'basic', name: 'Warm-up', n: 10000,
+      goal: 'Put 10,000 numbers into the tree, then look up random ones. How many lookups can it do in a second?',
+      q: 'About how many lookups per second?',
+      options: [
+        { v: 'low', label: 'Under 100 thousand a second' },
+        { v: 'mid', label: 'Between 100 thousand and 1 million a second' },
+        { v: 'high', label: 'Over 1 million a second' }
+      ],
+      explain: 'The answer is whichever range the measured lookup rate falls in.',
+      run: function () { return runWasm('basic', 10000); },
+      judge: function (res) { var r = measure(res, 1).opsPerSec; return { actual: r < 1e5 ? 'low' : (r < 1e6 ? 'mid' : 'high') }; },
+      takeaway: function (res) {
+        var ins = measure(res, 0), look = measure(res, 1);
+        return 'Lookups ran at ' + rate(look.opsPerSec) + ' (' + micro(look.microsPerOp) + ' each). Inserts ran at ' + rate(ins.opsPerSec) + ', which is slower because adding a key can split nodes and rebalance. Reading is the cheap part of a B-tree.';
+      }
+    },
+    {
+      id: 'order', name: 'Order matters', n: 50000,
+      goal: 'Insert 50,000 keys twice, once in sorted order and once shuffled. Which is faster?',
+      q: 'Which insert order is faster?',
+      options: [
+        { v: 'ordered', label: 'Sorted order is faster' },
+        { v: 'same', label: 'About the same (within 15%)' },
+        { v: 'shuffled', label: 'Shuffled order is faster' }
+      ],
+      explain: 'We call it "about the same" when the two rates are within 15% of each other.',
+      run: function () { return runWasm('order', 50000); },
+      judge: function (res) {
+        var r = measure(res, 0).opsPerSec / measure(res, 1).opsPerSec;
+        return { actual: r > 1.15 ? 'ordered' : (r < 1 / 1.15 ? 'shuffled' : 'same'), ratio: r };
+      },
+      takeaway: function (res) {
+        var a = measure(res, 0), b = measure(res, 1), r = a.opsPerSec / b.opsPerSec;
+        var line = r >= 1 ? 'Sorted inserts were ' + r.toFixed(2) + 'x the speed of shuffled ones.' : 'Shuffled inserts were ' + (1 / r).toFixed(2) + 'x the speed of sorted ones.';
+        return line + ' Both trees read back in sorted order, so the result is the same either way. Only the cost of building it differs, because the split pattern follows the order the keys arrive in.';
+      }
+    },
+    {
+      id: 'range', name: 'Range finder', n: 100000,
+      goal: 'The tree holds 100,000 keys. Read just 1% of them (a range), or read all of them. How much faster is the range?',
+      q: 'The 1% range scan is about how many times faster than the full scan?',
+      options: [
+        { v: 1, label: 'About 10 times faster' },
+        { v: 2, label: 'About 100 times faster' },
+        { v: 3, label: 'About 1,000 times faster' }
+      ],
+      explain: 'We compare the time of one scan of each, and round the speedup to the nearest power of ten.',
+      run: function () { return runWasm('range', 100000); },
+      judge: function (res) {
+        var win = 1000, r = measure(res, 0), f = measure(res, 1);
+        var speed = perScan(f, 100000) / perScan(r, win);
+        return { actual: Math.max(1, Math.min(3, oom(speed))), raw: speed };
+      },
+      takeaway: function (res) {
+        var win = 1000, r = measure(res, 0), f = measure(res, 1);
+        var speed = perScan(f, 100000) / perScan(r, win);
+        return 'One range scan took ' + perScan(r, win).toFixed(3) + ' ms and one full scan took ' + perScan(f, 100000).toFixed(2) + ' ms, about ' + Math.round(speed).toLocaleString('en-US') + 'x. A B-tree keeps keys sorted, so it finds the start of the range and walks only the keys it needs. That is the reason to use one instead of a hash map.';
+      }
+    },
+    {
+      id: 'ladder', name: 'Scale ladder', ladder: true,
+      goal: 'Grow the tree from 1,000 keys to 100,000 and watch what happens to a single lookup.',
+      q: 'When the tree is 100 times bigger, one lookup takes:',
+      options: [
+        { v: 'flat', label: 'About the same time (under 2x)' },
+        { v: 'mid', label: 'Somewhat longer (2x to 10x)' },
+        { v: 'big', label: 'Much longer (over 10x)' }
+      ],
+      explain: 'We compare the time per lookup at 100,000 keys with the time at 1,000 keys.',
+      steps: [1000, 10000, 50000, 100000],
+      judge: function (results) {
+        var a = results[0].measures[1].microsPerOp, b = results[results.length - 1].measures[1].microsPerOp;
+        var q = b / a;
+        return { actual: q < 2 ? 'flat' : (q <= 10 ? 'mid' : 'big'), ratio: q };
+      },
+      takeaway: function (results) {
+        var a = results[0].measures[1].microsPerOp, b = results[results.length - 1].measures[1].microsPerOp;
+        return 'A lookup went from ' + micro(a) + ' at 1,000 keys to ' + micro(b) + ' at 100,000 keys (' + (b / a).toFixed(1) + 'x). The tree only needs a few more levels as it grows, so the cost climbs slowly. Part of the rise can come from memory caches rather than the tree itself. The minimum height row is arithmetic from the node size, not something the library reports.';
+      }
+    }
+  ];
+
+  var current = 0;
+
+  // ---------- progress strip ----------
+  function renderProgress() {
+    var html = '';
+    LEVELS.forEach(function (lv, i) {
+      var done = !!state.done[lv.id];
+      var locked = i > 0 && !state.done[LEVELS[i - 1].id] && !done;
+      var cur = i === current;
+      html += '<li><button type="button" data-level="' + i + '" ' + (locked ? 'disabled ' : '') + (cur ? 'aria-current="step" ' : '') +
+        'class="w-full text-left rounded-xl border px-3 py-3 min-h-[56px] transition ' +
+        (cur ? 'border-brand-500 bg-brand-500/10 ' : 'border-dark-700 bg-dark-900 ') +
+        (locked ? 'opacity-50 cursor-not-allowed' : 'hover:border-brand-500/60') + '">' +
+        '<span class="block text-[11px] font-mono ' + (done ? 'text-brand-400' : 'text-slate-400') + '">Level ' + (i + 1) + (done ? ' · cleared' : (locked ? ' · locked' : '')) + '</span>' +
+        '<span class="block text-sm font-semibold text-white">' + esc(lv.name) + '</span></button></li>';
+    });
+    $('progress').innerHTML = html;
+    Array.prototype.forEach.call($('progress').querySelectorAll('button'), function (b) {
+      b.addEventListener('click', function () { current = +b.getAttribute('data-level'); renderLevel(); });
+    });
+  }
+
+  // ---------- result rendering ----------
+  function barsFor(measures, key, fmtFn) {
+    var max = Math.max.apply(null, measures.map(function (m) { return m[key]; }));
+    return measures.map(function (m) {
+      var w = Math.max(2, Math.round(m[key] / max * 100));
+      return '<div class="mb-3"><div class="flex justify-between gap-3 text-xs mb-1"><span class="text-slate-300">' + esc(m.label) + '</span><span class="font-mono text-white">' + fmtFn(m) + '</span></div>' +
+        '<div class="h-3 rounded-full bg-dark-800 overflow-hidden" role="presentation"><div class="bar-fill h-3 rounded-full bg-brand-500" style="width:' + (reduceMotion ? w : 0) + '%" data-w="' + w + '"></div></div></div>';
+    }).join('');
+  }
+  function animateBars(root) {
+    if (reduceMotion) return;
+    requestAnimationFrame(function () { requestAnimationFrame(function () {
+      Array.prototype.forEach.call(root.querySelectorAll('.bar-fill'), function (b) { b.style.width = b.getAttribute('data-w') + '%'; });
+    }); });
+  }
+  function table(res) {
+    var rows = res.measures.map(function (m) {
+      return '<tr class="border-t border-dark-800"><th scope="row" class="text-left font-normal py-2 pr-3 text-slate-300">' + esc(m.label) + '</th><td class="hidden sm:table-cell py-2 pr-3 font-mono text-right">' + fmt(m.ops) + '</td><td class="py-2 pr-3 font-mono text-right">' + m.millis.toFixed(1) + '</td><td class="py-2 pr-3 font-mono text-right text-white">' + fmt(m.opsPerSec) + '</td><td class="py-2 font-mono text-right">' + m.microsPerOp.toFixed(2) + '</td></tr>';
+    }).join('');
+    return '<div class="overflow-x-auto"><table class="w-full text-[11px] sm:text-xs"><caption class="sr-only">Measured results</caption><thead><tr class="text-slate-400 font-mono"><th scope="col" class="text-left font-normal pb-2">Workload</th><th scope="col" class="hidden sm:table-cell text-right font-normal pb-2 pr-3">Operations</th><th scope="col" class="text-right font-normal pb-2 pr-3">Time (ms)</th><th scope="col" class="text-right font-normal pb-2 pr-3">Per second</th><th scope="col" class="text-right font-normal pb-2">µs each</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+  }
+  function checks(res) {
+    return '<ul class="text-xs space-y-1 mt-3">' + res.checks.map(function (c) {
+      return '<li class="flex gap-2 ' + (res.verified ? 'text-brand-400' : 'text-rose-400') + '"><span aria-hidden="true">' + (res.verified ? '✓' : '✕') + '</span><span class="text-slate-300">' + esc(c) + '</span></li>';
+    }).join('') + '</ul>';
+  }
+  function setup(res) {
+    return '<p class="text-[11px] text-slate-400 font-mono mt-3">Setup: ' + res.n.toLocaleString('en-US') + ' keys · ' + res.keyType + ' keys, ' + res.valueType + ' values · ' + res.itemsPerNode + ' items per node · median of ' + res.trials + ' trials · seed ' + res.seed + '</p>';
+  }
+
+  // ---------- level view ----------
+  function renderLevel() {
+    var lv = LEVELS[current];
+    renderProgress();
+    var already = state.done[lv.id];
+    var html = '<p class="text-xs font-mono text-brand-400 mb-1">Level ' + (current + 1) + ' of ' + LEVELS.length + '</p>' +
+      '<h2 id="level-title" class="text-2xl font-bold text-white mb-2">' + esc(lv.name) + '</h2>' +
+      '<p class="text-slate-300 mb-5 max-w-2xl"><span class="text-white font-semibold">Your goal: </span>' + esc(lv.goal) + '</p>' +
+      '<form id="guess-form" aria-labelledby="q-label"><fieldset><legend id="q-label" class="text-sm font-semibold text-white mb-3">' + esc(lv.q) + '</legend><div class="grid gap-2 max-w-xl">' +
+      lv.options.map(function (o, i) {
+        return '<label class="opt flex items-center gap-3 rounded-xl border border-dark-700 bg-dark-950 px-4 py-3 min-h-[48px] cursor-pointer hover:border-dark-600"><input type="radio" name="guess" value="' + esc(o.v) + '" class="accent-emerald-400 w-4 h-4"' + (i === 0 ? ' required' : '') + '><span class="text-sm text-slate-200">' + esc(o.label) + '</span></label>';
+      }).join('') +
+      '</div></fieldset><p class="text-xs text-slate-400 mt-2 max-w-xl">' + esc(lv.explain) + '</p>' +
+      '<button id="go" type="submit" class="mt-5 rounded-xl bg-brand-600 hover:bg-brand-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold px-6 py-3 min-h-[48px]" ' + (ready ? '' : 'disabled') + '>Lock in my guess and run it</button></form>' +
+      '<div id="result" class="mt-6" aria-live="polite"></div>';
+    $('level-body').innerHTML = html;
+    $('guess-form').addEventListener('submit', function (e) { e.preventDefault(); play(lv); });
+    if (already) { $('result').innerHTML = '<p class="text-sm text-brand-400 font-mono">You cleared this level already. Guess again to replay it.</p>'; }
+  }
+
+  function setBusy(b) {
+    busy = b;
+    var go = $('go'); if (go) go.disabled = b || !ready;
+    $('sb-run').disabled = b || !ready;
+  }
+
+  function play(lv) {
+    if (busy || !ready) return;
+    var guess = (new FormData($('guess-form'))).get('guess');
+    if (guess === null) return;
+    setBusy(true);
+    $('result').innerHTML = '<p class="text-sm font-mono text-slate-300 flex items-center gap-2"><svg class="w-4 h-4 spin" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="#334155" stroke-width="3"/><path d="M21 12a9 9 0 0 0-9-9" stroke="#34d399" stroke-width="3" stroke-linecap="round"/></svg><span id="run-note">Running the real B-tree on your device...</span></p>';
+    var work;
+    if (lv.ladder) {
+      var out = [];
+      work = lv.steps.reduce(function (p, n) {
+        return p.then(function () {
+          var note = $('run-note'); if (note) note.textContent = 'Running with ' + n.toLocaleString('en-US') + ' keys...';
+          return runWasm('basic', n).then(function (r) { out.push(r); });
+        });
+      }, Promise.resolve()).then(function () { return out; });
+    } else {
+      work = lv.run();
+    }
+    work.then(function (res) { reveal(lv, guess, res); })
+      .catch(function (err) { $('result').innerHTML = '<p role="alert" class="text-sm text-rose-400">The run could not finish: ' + esc(err.message) + '. Reload the page and try again.</p>'; })
+      .then(function () { setBusy(false); });
+  }
+
+  function reveal(lv, guess, res) {
+    var j = lv.judge(res);
+    var correct = String(j.actual) === String(guess);
+    var opt = lv.options.filter(function (o) { return String(o.v) === String(j.actual); })[0];
+    state.done[lv.id] = true; state.correct[lv.id] = correct;
+    var primary = lv.ladder ? res[res.length - 1] : res;
+    var lookups = lv.ladder ? res[res.length - 1].measures[1].opsPerSec : (lv.id === 'basic' ? res.measures[1].opsPerSec : null);
+    var best = null;
+    if (lookups) { if (!state.best || lookups > state.best) { state.best = Math.round(lookups); best = true; } }
+    save(state);
+    renderProgress();
+
+    var verdict = correct
+      ? '<p class="pop text-lg font-bold text-brand-400 mb-1">Nailed it.</p><p class="text-sm text-slate-300 mb-4">The closest answer was yours' + (opt ? ': ' + esc(opt.label.toLowerCase()) : '') + '.</p>'
+      : '<p class="pop text-lg font-bold text-amber-400 mb-1">Not this time.</p><p class="text-sm text-slate-300 mb-4">The closest answer was ' + (opt ? esc(opt.label.toLowerCase()) : 'outside the options on offer') + '. Surprises are how you learn where a data structure actually bends.</p>';
+
+    var body;
+    if (lv.ladder) {
+      var max = Math.max.apply(null, res.map(function (r) { return r.measures[1].microsPerOp; }));
+      body = '<div class="mb-4">' + res.map(function (r) {
+        var m = r.measures[1], w = Math.max(2, Math.round(m.microsPerOp / max * 100));
+        return '<div class="mb-3"><div class="flex justify-between gap-3 text-xs mb-1"><span class="text-slate-300">' + r.n.toLocaleString('en-US') + ' keys <span class="text-slate-400">· at least ' + minHeight(r.n) + ' levels</span></span><span class="font-mono text-white">' + micro(m.microsPerOp) + ' per lookup</span></div><div class="h-3 rounded-full bg-dark-800 overflow-hidden" role="presentation"><div class="bar-fill h-3 rounded-full bg-accent-cyan" style="width:' + (reduceMotion ? w : 0) + '%" data-w="' + w + '"></div></div></div>';
+      }).join('') + '</div>' +
+      '<div class="overflow-x-auto"><table class="w-full text-[11px] sm:text-xs"><caption class="sr-only">Results at each size</caption><thead><tr class="text-slate-400 font-mono"><th scope="col" class="text-left font-normal pb-2">Keys</th><th scope="col" class="text-right font-normal pb-2 pr-3">Inserts per second</th><th scope="col" class="text-right font-normal pb-2 pr-3">Lookups per second</th><th scope="col" class="text-right font-normal pb-2">Min. levels</th></tr></thead><tbody>' +
+      res.map(function (r) { return '<tr class="border-t border-dark-800"><th scope="row" class="text-left font-normal py-2 text-slate-300">' + r.n.toLocaleString('en-US') + '</th><td class="py-2 pr-3 font-mono text-right">' + fmt(r.measures[0].opsPerSec) + '</td><td class="py-2 pr-3 font-mono text-right text-white">' + fmt(r.measures[1].opsPerSec) + '</td><td class="py-2 font-mono text-right">' + minHeight(r.n) + '</td></tr>'; }).join('') +
+      '</tbody></table></div><p class="text-[11px] text-slate-400 font-mono mt-3">Min. levels is arithmetic (a node of 8 items fans out to at most 9 children), measured values are the rest. Same setup as before, median of 3 trials per size.</p>' +
+      res.map(function (r) { return checks(r); }).slice(-1)[0];
+    } else {
+      var key = (lv.id === 'basic' || lv.id === 'order') ? 'opsPerSec' : 'opsPerSec';
+      body = barsFor(res.measures, key, function (m) { return rate(m.opsPerSec); }) + table(res) + checks(res) + setup(res);
+    }
+
+    var next = current < LEVELS.length - 1
+      ? '<button id="next" type="button" class="mt-6 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-bold px-6 py-3 min-h-[48px]">Next level</button>'
+      : finale();
+    $('result').innerHTML = verdict +
+      '<div class="rounded-xl bg-dark-950 border border-dark-800 p-3 sm:p-5">' + body + '</div>' +
+      '<p class="text-sm text-slate-200 mt-4 max-w-2xl"><span class="font-semibold text-white">What it means: </span>' + esc(lv.takeaway(res)) + '</p>' +
+      (best ? '<p class="text-xs font-mono text-brand-400 mt-3">New best on this device: ' + rate(state.best) + ' lookups.</p>' : '') +
+      next;
+    $('raw').textContent = JSON.stringify(lv.ladder ? res : res, null, 2);
+    animateBars($('result'));
+    var n = $('next'); if (n) { n.addEventListener('click', function () { current++; renderLevel(); $('game').scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth' }); $('level-title').setAttribute('tabindex', '-1'); $('level-title').focus(); }); n.focus(); }
+    var again = $('again'); if (again) again.addEventListener('click', function () { state = { done: {}, correct: {}, best: state.best }; save(state); current = 0; renderLevel(); $('game').scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth' }); });
+  }
+
+  function finale() {
+    var right = LEVELS.filter(function (l) { return state.correct[l.id]; }).length;
+    return '<div class="pop mt-6 rounded-xl border border-brand-500/40 bg-brand-500/10 p-5"><p class="text-lg font-bold text-white">Arena clear.</p><p class="text-sm text-slate-300 mt-1">You called ' + right + ' of ' + LEVELS.length + ' correctly.' + (state.best ? ' Your best lookup rate on this device is ' + rate(state.best) + '.' : '') + '</p><p class="text-sm text-slate-400 mt-2">Next, try the sandbox below with other sizes, or run the native benchmark yourself.</p><button id="again" type="button" class="mt-4 rounded-xl border border-dark-600 hover:border-brand-500 text-white font-semibold px-5 py-2 min-h-[44px]">Play again</button></div>';
+  }
+
+  // ---------- sandbox ----------
+  $('sb-run').addEventListener('click', function () {
+    if (busy || !ready) return;
+    var sc = $('sb-scenario').value, n = +$('sb-n').value;
+    setBusy(true);
+    $('sb-out').innerHTML = '<p class="text-sm font-mono text-slate-300">Running...</p>';
+    runWasm(sc, n).then(function (res) {
+      $('sb-out').innerHTML = barsFor(res.measures, 'opsPerSec', function (m) { return rate(m.opsPerSec); }) + table(res) + checks(res) + setup(res);
+      $('raw').textContent = JSON.stringify(res, null, 2);
+      animateBars($('sb-out'));
+    }).catch(function (err) {
+      $('sb-out').innerHTML = '<p role="alert" class="text-sm text-rose-400">' + esc(err.message) + '</p>';
+    }).then(function () { setBusy(false); });
+  });
+
+  // ---------- boot ----------
+  function status(html, ok) { $('status').innerHTML = html; }
+  function unsupported(msg) {
+    $('status').innerHTML = '<span class="text-amber-400" role="alert">' + esc(msg) + '</span>';
+    $('level-body').innerHTML = '<h2 id="level-title" class="text-xl font-bold text-white mb-2">This page needs WebAssembly</h2><p class="text-sm text-slate-300 max-w-xl">Your browser cannot run the engine, so the game is switched off. Everything else on this page still applies, and you can run the same benchmark natively with the commands under "Run it natively". The <a class="underline text-brand-400" href="../">homepage</a> has demos that do not need it.</p>';
+    $('progress').innerHTML = '';
+  }
+
+  renderLevel();
+
+  if (typeof WebAssembly !== 'object' || typeof Go === 'undefined') {
+    unsupported('WebAssembly is not available in this browser.');
+    return;
+  }
+  var go = new Go();
+  var fetched = fetch('arena.wasm');
+  var inst = (WebAssembly.instantiateStreaming
+    ? WebAssembly.instantiateStreaming(fetched, go.importObject)
+    : fetched.then(function (r) { return r.arrayBuffer(); }).then(function (b) { return WebAssembly.instantiate(b, go.importObject); }))
+    .catch(function () {
+      // wrong MIME type from a simple static host: fall back to bytes
+      return fetch('arena.wasm').then(function (r) { return r.arrayBuffer(); }).then(function (b) { return WebAssembly.instantiate(b, go.importObject); });
+    });
+  inst.then(function (r) {
+    go.run(r.instance);
+    var tries = 0;
+    (function wait() {
+      if (window.__BTREE_ARENA_READY__) {
+        ready = true;
+        status('<span class="text-brand-400">Engine ready. Everything runs on this device.</span>');
+        var go1 = $('go'); if (go1) go1.disabled = false;
+        $('sb-run').disabled = false;
+      } else if (tries++ < 100) { setTimeout(wait, 50); }
+      else { unsupported('The engine did not start. Reload the page to try again.'); }
+    })();
+  }).catch(function (e) { unsupported('The engine could not load: ' + e.message); });
+})();
+</script>
+</body>
+</html>
