@@ -108,3 +108,24 @@ test.describe('Joltrin Arena B-tree challenge', () => {
     expect(overflow).toBeLessThanOrEqual(0);
   });
 });
+
+test.describe('Finding the game', () => {
+  test('it is linked from the homepage, the agents page, the docs and the command palette', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('#live-experiences a[href="./btree/"]')).toBeVisible();
+    await expect(page.locator('nav a[href="./btree/"]').first()).toHaveCount(1);
+    await page.goto('/agents/', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('a[href="../btree/"]').first()).toHaveCount(1);
+    await page.goto('/docs/', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('nav a[href="../btree/"]')).toBeVisible();
+  });
+
+  test('the homepage command palette finds it by name', async ({ page, isMobile }) => {
+    test.skip(isMobile, 'the palette trigger is desktop-only');
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await page.getByRole('button', { name: /open command palette/i }).click();
+    await page.locator('#cmdk-input').fill('b-tree');
+    await page.locator('#cmdk-input').press('Enter');
+    await expect(page).toHaveURL(/\/btree\/?$/);
+  });
+});

@@ -114,6 +114,9 @@
         <a href="../arena/" class="px-2.5 py-1.5 rounded-lg hover:bg-dark-800 text-slate-400 hover:text-slate-200 transition">
           <span>Arena</span>
         </a>
+        <a href="../btree/" class="px-2.5 py-1.5 rounded-lg hover:bg-dark-800 text-slate-400 hover:text-slate-200 transition">
+          <span>B-tree game</span>
+        </a>
         <span class="px-2.5 py-1.5 rounded-lg bg-accent-violet/20 text-accent-violet border border-accent-violet/30 font-semibold">
           <span>Agents</span>
         </span>
@@ -168,6 +171,7 @@
       <button onclick="openCommandPalette()" class="w-full text-left block px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-dark-800 transition">🔍 Search</button>
       <a href="../" class="block px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-dark-800 transition">Overview</a>
       <a href="../arena/" class="block px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-dark-800 transition">Arena</a>
+      <a href="../btree/" class="block px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-dark-800 transition">B-tree game</a>
       <span class="block px-3 py-2 rounded-lg bg-accent-violet/20 text-accent-violet font-semibold">Agents</span>
       <a href="../docs/" class="block px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-dark-800 transition">Docs</a>
       <a href="../#pricing" class="block px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-dark-800 transition">Pricing</a>
@@ -705,6 +709,7 @@ curl localhost:8087/.well-known/agent-card.json</pre>
         <ul class="space-y-2 text-xs font-mono">
           <li><a href="../" class="hover:text-white transition">Technical Demo &amp; Engine</a></li>
           <li><a href="../arena/" class="hover:text-white transition">Joltrin Arena (Simulation)</a></li>
+          <li><a href="../btree/" class="hover:text-white transition">Joltrin Arena: B-tree game</a></li>
           <li><a href="./" class="hover:text-white transition text-accent-violet">Joltrin Agents (Safety Barrier)</a></li>
           <li><a href="../#pricing" class="hover:text-white transition">Editions &amp; Pricing</a></li>
           <li><a href="#enterprise-form" class="hover:text-white transition">Enterprise Access</a></li>
@@ -857,6 +862,7 @@ curl localhost:8087/.well-known/agent-card.json</pre>
       { label: 'Enterprise', hint: 'section', action: () => location.hash = '#enterprise-form' },
       { label: 'Overview', hint: 'go to', action: () => location.href = '../' },
       { label: 'Joltrin Arena', hint: 'go to', action: () => location.href = '../arena/' },
+      { label: 'Joltrin Arena: B-tree challenge', hint: 'go to', action: () => location.href = '../btree/' },
       { label: 'Pricing', hint: 'go to', action: () => location.href = '../#pricing' },
       { label: 'GitHub Repository', hint: 'external', action: () => window.open('https://github.com/SharedCode/joltrin', '_blank', 'noopener') },
     ];
