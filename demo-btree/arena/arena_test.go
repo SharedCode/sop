@@ -36,8 +36,16 @@ func TestRunRejectsUnsafeInput(t *testing.T) {
 }
 
 func TestMaxSizeStaysBounded(t *testing.T) {
-	res, err := Run(ScenarioBasic, MaxN)
-	if err != nil || !res.Verified {
-		t.Fatalf("max n failed: %v %v", err, res.Checks)
+	// Every scenario must complete and verify at the largest size a visitor can ask for.
+	for _, sc := range []string{ScenarioBasic, ScenarioOrder, ScenarioRange} {
+		res, err := Run(sc, MaxN)
+		if err != nil || !res.Verified {
+			t.Fatalf("%s at max n failed: %v %v", sc, err, res.Checks)
+		}
+		for _, m := range res.Measures {
+			if m.Ops <= 0 || m.OpsPerSec <= 0 {
+				t.Fatalf("%s at max n has a bad measure %+v", sc, m)
+			}
+		}
 	}
 }
