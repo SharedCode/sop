@@ -88,7 +88,7 @@ test.describe('Homepage', () => {
   test('intro video sits below the hero and autoplays muted', async ({ page }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     const frame = page.locator('iframe[title="Joltrin intro video"]');
-    await expect(frame).toHaveAttribute('src', /youtube-nocookie\.com\/embed\/F0jYkBHJluI\?.*autoplay=1.*mute=1/);
+    await expect(frame).toHaveAttribute('src', /youtube-nocookie\.com\/embed\/WZbz868nTi4\?.*autoplay=1.*mute=1/);
     const frameY = (await frame.boundingBox())!.y;
     const heroY = (await page.getByRole('heading', { level: 1 }).boundingBox())!.y;
     expect(frameY).toBeGreaterThan(heroY);

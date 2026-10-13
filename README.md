@@ -23,14 +23,14 @@ Joltrin (formerly SOP) is an open-source Go library that checks an AI agent's ac
 **What Joltrin does.** The agent emits intent. Joltrin checks the intent against the trace and the runbook's rules, outside the agent's context window. The check and the commit are one call, so a step is recorded only if it passed. A step whose required state is missing is refused. A claim that something happened is not evidence that it happened.
 
 <p align="center">
-  <a href="https://youtu.be/F0jYkBHJluI">
+  <a href="https://youtu.be/WZbz868nTi4">
     <img src="docs/assets/joltrin-demo.gif" alt="Joltrin demo. Click to watch the video." width="760" />
   </a>
 </p>
 
 <table align="center">
   <tr>
-    <td align="center"><a href="https://www.youtube.com/watch?v=F0jYkBHJluI"><img src="https://img.youtube.com/vi/F0jYkBHJluI/hqdefault.jpg" alt="Joltrin full demo on YouTube" width="360" /></a><br /><sub>Full demo</sub></td>
+    <td align="center"><a href="https://www.youtube.com/watch?v=WZbz868nTi4"><img src="https://img.youtube.com/vi/WZbz868nTi4/hqdefault.jpg" alt="Joltrin full demo on YouTube" width="360" /></a><br /><sub>Full demo</sub></td>
     <td align="center"><a href="https://www.youtube.com/shorts/oS1bfq_ZDkg"><img src="https://img.youtube.com/vi/oS1bfq_ZDkg/hqdefault.jpg" alt="Joltrin short on YouTube" width="200" /></a><br /><sub>Short</sub></td>
   </tr>
 </table>
