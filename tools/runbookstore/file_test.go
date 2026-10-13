@@ -91,6 +91,7 @@ func TestLoad_RefusesBadFiles(t *testing.T) {
 		{"not json", `{`, "invalid JSON"},
 		{"empty file", "  \n", "the file is empty"},
 		{"misspelled key", `{"workflows":{"w":{"setps":[]}}}`, "unknown field"},
+		{"misspelled key names the fields a step takes", `{"workflows":{"w":{"steps":[{"name":"a","establishes":["x"]}]}}}`, "a step takes id, requires and establishes"},
 		{"no workflows", `{"workflows":{}}`, "no workflows found"},
 		{"empty workflow name", `{"workflows":{"":{"steps":[{"id":"a","establishes":["x"]}]}}}`, "name is empty"},
 		{"no steps", `{"workflows":{"w":{"steps":[]}}}`, "no steps"},
