@@ -22,7 +22,7 @@ func TestDemoBlocksTheDropThenAllowsItInOrder(t *testing.T) {
 			t.Errorf("%s should be allowed only after the block:\n%s", step, s)
 		}
 	}
-	for _, want := range []string{"backup_validated", "trace: [take_backup validate_backup drop_prod_db]"} {
+	for _, want := range []string{"backup_validated", "trace: [take_backup validate_backup drop_prod_db]", "Next: run `sop-mcp-server setup`"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("output missing %q:\n%s", want, s)
 		}

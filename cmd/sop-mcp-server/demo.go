@@ -97,5 +97,6 @@ func runDemoArgs(args []string, out, errw io.Writer) int {
 		}
 	}
 	fmt.Fprintf(out, "\ntrace: %v\n", res.Trace)
+	fmt.Fprintln(out, "\nNext: run `sop-mcp-server setup` to see how to connect your agent.")
 	return 0
 }
