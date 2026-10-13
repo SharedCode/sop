@@ -1267,12 +1267,12 @@ Error from server: admission webhook "gate.joltrin.dev" denied the request: step
         <!-- Benchmark Controls -->
         <div class="flex flex-wrap items-center gap-4 mb-8 bg-dark-950 p-4 rounded-xl border border-dark-800">
           <div>
-            <label class="block text-xs font-mono text-slate-400 mb-1">Batch Operations Count</label>
-            <div class="flex items-center space-x-2">
-              <button onclick="setBenchOps(2500)" class="bench-op-btn px-3 py-1.5 rounded-lg bg-dark-800 text-slate-300 text-xs font-mono hover:bg-dark-700 transition">2,500</button>
-              <button onclick="setBenchOps(5000)" class="bench-op-btn px-3 py-1.5 rounded-lg bg-accent-violet/20 border border-accent-violet/40 text-accent-violet text-xs font-mono font-bold transition">5,000</button>
-              <button onclick="setBenchOps(15000)" class="bench-op-btn px-3 py-1.5 rounded-lg bg-dark-800 text-slate-300 text-xs font-mono hover:bg-dark-700 transition">15,000</button>
-              <button onclick="setBenchOps(30000)" class="bench-op-btn px-3 py-1.5 rounded-lg bg-dark-800 text-slate-300 text-xs font-mono hover:bg-dark-700 transition">30,000</button>
+            <span id="bench-ops-label" class="block text-xs font-mono text-slate-400 mb-1">Batch Operations Count</span>
+            <div class="flex items-center space-x-2" role="group" aria-labelledby="bench-ops-label">
+              <button onclick="setBenchOps(2500)" aria-pressed="false" class="bench-op-btn px-3 py-1.5 rounded-lg bg-dark-800 text-slate-300 text-xs font-mono hover:bg-dark-700 transition">2,500</button>
+              <button onclick="setBenchOps(5000)" aria-pressed="true" class="bench-op-btn px-3 py-1.5 rounded-lg bg-accent-violet/20 border border-accent-violet/40 text-accent-violet text-xs font-mono font-bold transition">5,000</button>
+              <button onclick="setBenchOps(15000)" aria-pressed="false" class="bench-op-btn px-3 py-1.5 rounded-lg bg-dark-800 text-slate-300 text-xs font-mono hover:bg-dark-700 transition">15,000</button>
+              <button onclick="setBenchOps(30000)" aria-pressed="false" class="bench-op-btn px-3 py-1.5 rounded-lg bg-dark-800 text-slate-300 text-xs font-mono hover:bg-dark-700 transition">30,000</button>
             </div>
           </div>
           <div class="flex-grow flex justify-end">
@@ -2025,7 +2025,9 @@ Error from server: admission webhook "gate.joltrin.dev" denied the request: step
     function setBenchOps(n) {
       selectedBenchOps = n;
       document.querySelectorAll('.bench-op-btn').forEach(btn => {
-        if (btn.innerText.includes(n.toLocaleString())) {
+        const selected = btn.innerText.includes(n.toLocaleString());
+        btn.setAttribute('aria-pressed', String(selected));
+        if (selected) {
           btn.className = 'bench-op-btn px-3 py-1.5 rounded-lg bg-accent-violet/20 border border-accent-violet/40 text-accent-violet text-xs font-mono font-bold transition';
         } else {
           btn.className = 'bench-op-btn px-3 py-1.5 rounded-lg bg-dark-800 text-slate-300 text-xs font-mono hover:bg-dark-700 transition';
