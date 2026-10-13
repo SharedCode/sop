@@ -79,33 +79,40 @@ Now that your server is running, you can write code to interact with it. SOP is 
         "github.com/sharedcode/joltrin/v5/database"
     )
 
-    ctx := context.Background()
+    func run(ctx context.Context) error {
+        // Open Database (Standalone)
+        opts, err := database.ValidateOptions(sop.DatabaseOptions{
+            Type:          sop.Standalone,
+            StoresFolders: []string{"./data"},
+        })
+        if err != nil {
+            return err
+        }
 
-    // Open Database (Standalone)
-    opts, err := database.ValidateOptions(sop.DatabaseOptions{
-        Type:          sop.Standalone,
-        StoresFolders: []string{"./data"},
-    })
-    if err != nil {
-        log.Fatal(err)
+        // Transaction & Store
+        tx, err := database.BeginTransaction(ctx, opts, sop.ForWriting)
+        if err != nil {
+            return err
+        }
+        // Roll back if anything below fails before Commit.
+        defer tx.Rollback(ctx)
+
+        store, err := database.NewBtree[string, string](ctx, opts, "users", tx, nil)
+        if err != nil {
+            return err
+        }
+
+        // Add Item
+        if _, err := store.Add(ctx, "user_999", "Alice"); err != nil {
+            return err
+        }
+        return tx.Commit(ctx)
     }
 
-    // Transaction & Store
-    tx, err := database.BeginTransaction(ctx, opts, sop.ForWriting)
-    if err != nil {
-        log.Fatal(err)
-    }
-    store, err := database.NewBtree[string, string](ctx, opts, "users", tx, nil)
-    if err != nil {
-        log.Fatal(err)
-    }
-
-    // Add Item
-    if _, err := store.Add(ctx, "user_999", "Alice"); err != nil {
-        log.Fatal(err)
-    }
-    if err := tx.Commit(ctx); err != nil {
-        log.Fatal(err)
+    func main() {
+        if err := run(context.Background()); err != nil {
+            log.Fatal(err)
+        }
     }
     ```
 
