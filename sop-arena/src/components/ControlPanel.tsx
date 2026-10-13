@@ -223,7 +223,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
         <div className="flex justify-end pt-1">
           <button
             onClick={onReset}
-            className="text-[11px] font-mono text-slate-500 hover:text-slate-300 flex items-center space-x-1 transition"
+            className="py-1 text-[11px] font-mono text-slate-500 hover:text-slate-300 flex items-center space-x-1 transition"
           >
             <RotateCcw className="w-3 h-3" />
             <span>Reset System Baseline</span>
