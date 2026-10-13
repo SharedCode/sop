@@ -236,4 +236,10 @@ test.describe('Homepage', () => {
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow).toBeLessThanOrEqual(0);
   });
+
+  test('enterprise inquiry status is announced to screen readers', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('#form-status-alert')).toHaveAttribute('role', 'status');
+    await expect(page.locator('#form-status-alert')).toHaveAttribute('aria-live', 'polite');
+  });
 });
