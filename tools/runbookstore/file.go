@@ -3,6 +3,7 @@ package runbookstore
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -98,6 +99,10 @@ func Load(store *Store, r io.Reader) ([]string, error) {
 	if err := dec.Decode(&doc); err != nil {
 		if strings.HasPrefix(err.Error(), "json: unknown field") {
 			return nil, fmt.Errorf("runbooks: %s; a step takes id, requires and establishes, a safety rule takes name, forbidden and requires, and a reachability rule takes name and target", strings.TrimPrefix(err.Error(), "json: "))
+		}
+		var typeErr *json.UnmarshalTypeError
+		if errors.As(err, &typeErr) && typeErr.Field == "workflows" {
+			return nil, fmt.Errorf(`runbooks: "workflows" must be an object keyed by workflow name, expected {"workflows": {"name": {"steps": [...]}}}`)
 		}
 		return nil, fmt.Errorf("runbooks: invalid JSON: %w", err)
 	}

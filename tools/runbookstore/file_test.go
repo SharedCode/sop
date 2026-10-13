@@ -93,6 +93,7 @@ func TestLoad_RefusesBadFiles(t *testing.T) {
 		{"misspelled key", `{"workflows":{"w":{"setps":[]}}}`, "unknown field"},
 		{"misspelled key names the fields a step takes", `{"workflows":{"w":{"steps":[{"name":"a","establishes":["x"]}]}}}`, "a step takes id, requires and establishes"},
 		{"no workflows", `{"workflows":{}}`, "no workflows found"},
+		{"workflows as a list", `{"workflows":[{"name":"w","steps":[{"id":"a","establishes":["x"]}]}]}`, `"workflows" must be an object keyed by workflow name`},
 		{"empty workflow name", `{"workflows":{"":{"steps":[{"id":"a","establishes":["x"]}]}}}`, "name is empty"},
 		{"no steps", `{"workflows":{"w":{"steps":[]}}}`, "no steps"},
 		{"step without id", `{"workflows":{"w":{"steps":[{"establishes":["x"]}]}}}`, "no id"},
