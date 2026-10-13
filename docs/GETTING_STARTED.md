@@ -77,15 +77,17 @@ Now that your server is running, you can write code to interact with it. SOP is 
         "github.com/sharedcode/joltrin/v5/database"
     )
 
+    ctx := context.Background()
+
     // Open Database (Standalone)
-    db, _ := database.Open(sop.DatabaseOptions{
-        Type: sop.Standalone, 
+    opts, _ := database.ValidateOptions(sop.DatabaseOptions{
+        Type:          sop.Standalone,
         StoresFolders: []string{"./data"},
     })
 
     // Transaction & Store
-    tx, _ := db.BeginTransaction(ctx, sop.ForWriting)
-    store, _ := tx.GetStore("users")
+    tx, _ := database.BeginTransaction(ctx, opts, sop.ForWriting)
+    store, _ := database.NewBtree[string, string](ctx, opts, "users", tx, nil)
 
     // Add Item
     store.Add(ctx, "user_999", "Alice")
