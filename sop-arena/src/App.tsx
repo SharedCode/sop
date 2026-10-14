@@ -178,7 +178,7 @@ export const App: React.FC = () => {
             <section className="bg-gradient-to-r from-dark-900 via-dark-850 to-dark-900 border border-dark-800 rounded-3xl p-6 sm:p-8 relative overflow-hidden shadow-xl">
               <div className="relative z-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
                 <div className="max-w-2xl space-y-2">
-                  <div className="inline-flex items-center space-x-2 px-2.5 py-0.5 rounded-full bg-brand-500/10 border border-brand-500/30 text-brand-400 text-xs font-mono font-semibold">
+                  <div className="inline-flex items-center space-x-2 px-2.5 py-0.5 rounded-2xl sm:rounded-full bg-brand-500/10 border border-brand-500/30 text-brand-400 text-xs font-mono font-semibold">
                     <Flame className="w-3.5 h-3.5" />
                     <span>JOLTRIN ARENA: Keep the System Alive</span>
                   </div>
