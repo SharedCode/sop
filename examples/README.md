@@ -89,6 +89,14 @@ One process runs an agent partway and is interrupted. A second process opens the
 The smallest SOP program. It uses the in-memory B-tree, so it needs no infrastructure.
 - **Run**: `go run ./examples/quickstart`
 
+### 15. Agent memory with atomic checkpoints (`agent_memory`)
+Stores agent memory and its metadata in one atomic commit, then recalls it by vector similarity across agent memory spaces. Runs in one Go process with no external daemons.
+- **Run**: `go run ./examples/agent_memory`
+
+### 16. Agents handing work to each other (`agent_team`)
+Jira, Grafana, AWS, and PagerDuty agents finish a task by passing work to each other. Each call passes a scope check (the agent's own allowlist and limits), a grounding check (a claim must match evidence a tool returned), and the verification barrier.
+- **Run**: `go run ./examples/agent_team`
+
 ---
 
 ## ▶️ Running the Examples
