@@ -56,26 +56,26 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header className="border-b border-dark-800 bg-dark-950/80 backdrop-blur-md sticky top-0 z-40">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2 sm:gap-4">
+      <div className="max-w-7xl min-[1700px]:max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2 sm:gap-4">
         
         {/* Brand Logo & Title */}
-        <div className="flex items-center space-x-3 min-w-0">
+        <div className="flex items-center space-x-3 min-w-0 sm:flex-shrink-0">
           <img src="./logo-mark.png" alt="Joltrin" className="w-9 h-9 object-contain flex-shrink-0" width={36} height={36} />
           <div className="min-w-0">
             <div className="flex items-center space-x-2 min-w-0">
               <span className="font-extrabold tracking-tight text-white text-base sm:text-lg truncate leading-none">JOLTRIN ARENA</span>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-brand-500/10 border border-brand-500/30 text-brand-400 font-mono font-semibold uppercase whitespace-nowrap hidden sm:inline-block">
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-brand-500/10 border border-brand-500/30 text-brand-400 font-mono font-semibold uppercase whitespace-nowrap hidden min-[1700px]:inline-block">
                 Interactive Sim
               </span>
             </div>
-            <p className="text-[10px] text-slate-400 font-mono hidden md:block whitespace-nowrap mt-0.5">
+            <p className="text-[10px] text-slate-400 font-mono hidden min-[1700px]:block whitespace-nowrap mt-0.5">
               Distributed systems survival simulation
             </p>
           </div>
         </div>
 
         {/* View Mode Navigation Switcher & Cross-Demo Links */}
-        <div className="hidden md:flex items-center space-x-1 bg-dark-900 p-1 rounded-xl border border-dark-800">
+        <div className="hidden xl:flex items-center space-x-1 whitespace-nowrap bg-dark-900 p-1 rounded-xl border border-dark-800">
           <a
             href="../"
             className="px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1 text-slate-400 hover:text-white transition"
@@ -149,7 +149,7 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Enterprise Inquiry Trigger */}
           <button
             onClick={() => onOpenEnterprise('enterprise')}
-            className="hidden sm:flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-dark-900 hover:bg-dark-850 text-brand-400 border border-brand-500/30 text-xs font-semibold shadow-sm transition"
+            className="hidden sm:flex xl:hidden min-[1700px]:flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-dark-900 hover:bg-dark-850 text-brand-400 border border-brand-500/30 text-xs font-semibold shadow-sm transition"
             title="Deploy Joltrin in Production"
           >
             <Building2 className="w-3.5 h-3.5" />
@@ -157,7 +157,7 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
           
           {/* Reliability Score Live Capsule */}
-          <div className="hidden lg:flex items-center space-x-2 bg-dark-900 px-3 py-1.5 rounded-lg border border-dark-800 font-mono text-xs">
+          <div className="hidden min-[1700px]:flex items-center space-x-2 bg-dark-900 px-3 py-1.5 rounded-lg border border-dark-800 font-mono text-xs">
             <span className="text-slate-400">Reliability:</span>
             <span className={`font-bold ${reliabilityScore > 90 ? 'text-brand-400' : 'text-amber-400'}`}>
               {reliabilityScore.toFixed(1)}%
@@ -177,6 +177,7 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Sound Toggle */}
           <button
             onClick={toggleSound}
+            aria-label={isMuted ? 'Unmute Sound FX' : 'Mute Sound FX'}
             className="p-2 rounded-lg bg-dark-900 hover:bg-dark-850 text-slate-400 hover:text-white border border-dark-800 transition"
             title={isMuted ? 'Unmute Sound FX' : 'Mute Sound FX'}
           >
@@ -186,6 +187,7 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Share Link */}
           <button
             onClick={handleShare}
+            aria-label="Copy link to this demo"
             className="p-2 rounded-lg bg-dark-900 hover:bg-dark-850 text-slate-400 hover:text-white border border-dark-800 transition"
             title="Challenge a teammate / Share Demo"
           >
@@ -205,12 +207,12 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="hidden sm:inline">GitHub</span>
           </a>
 
-          {/* Mobile Menu Toggle: the nav switcher above is md:flex-only, this is
+          {/* Mobile Menu Toggle: the nav switcher above is xl:flex-only, this is
               the only way to reach Tech Demo, Barrier, Investor Mode, Compare,
               or Enterprise below that breakpoint. */}
           <button
             onClick={() => setMobileMenuOpen((open) => !open)}
-            className="md:hidden p-2 rounded-lg bg-dark-900 hover:bg-dark-850 text-slate-300 hover:text-white border border-dark-800 transition"
+            className="xl:hidden p-2 rounded-lg bg-dark-900 hover:bg-dark-850 text-slate-300 hover:text-white border border-dark-800 transition"
             aria-label="Toggle navigation menu"
             aria-expanded={mobileMenuOpen}
           >
@@ -223,7 +225,7 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Mobile Nav Panel: same destinations as the desktop switcher above,
           stacked for a narrow viewport. */}
       {mobileMenuOpen && (
-        <div className="md:hidden border-t border-dark-800 bg-dark-950 px-4 py-3 space-y-1 text-sm font-mono">
+        <div className="xl:hidden border-t border-dark-800 bg-dark-950 px-4 py-3 space-y-1 text-sm font-mono">
           <button
             onClick={() => { onOpenPalette(); setMobileMenuOpen(false); }}
             className="block w-full text-left px-3 py-2 rounded-lg text-slate-300 hover:text-white hover:bg-dark-900 transition"
