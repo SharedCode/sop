@@ -68,6 +68,27 @@ Enumerates every order the verifier accepts that reaches `rollback_complete` on 
 - **Check**: `go test ./examples/runbook_order_lab -race -count=1`
 - **Note**: a small local lab, not a product feature. Its README records the measured enumeration cost and its limits.
 
+### 10. Verification barrier blocking an out-of-order step (`verify_barrier`)
+An agent tries to drop the production database before a backup is validated. The barrier blocks the step, then allows the valid sequence. Start here to see the barrier decide in real time.
+- **Run**: `go run ./examples/verify_barrier`
+
+### 11. Barrier decisions published to NATS (`verify_barrier_nats`)
+The same barrier as `verify_barrier`, with every decision published through `adapters/nats` so a separate subscriber can watch it. The barrier behaves the same with or without the bridge.
+- **Needs**: a NATS server at `nats://127.0.0.1:4222` (`nats-server`, or `docker run -p 4222:4222 nats`)
+- **Run**: `go run ./examples/verify_barrier_nats`
+
+### 12. Replaying recorded decisions against a stricter workflow (`replay`)
+Records barrier decisions into an `ai/ledger` run, then replays that history against a stricter candidate workflow to catch a safety regression before it ships.
+- **Run**: `go run ./examples/replay`
+
+### 13. Crash recovery with the ledger (`ledger`)
+One process runs an agent partway and is interrupted. A second process opens the same durable storage, resumes from the last checkpoint, finishes the run, and replays the full history.
+- **Run**: `go run ./examples/ledger`
+
+### 14. Quickstart (`quickstart`)
+The smallest SOP program. It uses the in-memory B-tree, so it needs no infrastructure.
+- **Run**: `go run ./examples/quickstart`
+
 ---
 
 ## ▶️ Running the Examples
