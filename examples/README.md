@@ -62,6 +62,12 @@ Gemma (`gemma3:4b`) proposes actions and `embeddinggemma` provides the vectors. 
 - **Run**: `ollama pull gemma3:4b && ollama pull embeddinggemma`, then `go run ./examples/gemma_ollama`
 - **Check**: `go test ./examples/gemma_ollama` (offline). Add `JOLTRIN_OLLAMA_LIVE=1 -run TestLiveGemma` to run against your local Ollama.
 
+### 9. Runbook order lab (`runbook_order_lab`)
+Enumerates every order the verifier accepts that reaches `rollback_complete` on the five-step barrier workflow, and shows that a naive drop-first order is blocked once. Every step goes through `verify.CheckAndCommit`.
+- **Run**: `go run ./examples/runbook_order_lab`
+- **Check**: `go test ./examples/runbook_order_lab -race -count=1`
+- **Note**: a small local lab, not a product feature. Its README records the measured enumeration cost and its limits.
+
 ---
 
 ## ▶️ Running the Examples
