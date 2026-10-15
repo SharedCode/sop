@@ -14,7 +14,7 @@ rm -rf "$SITE"
 mkdir -p "$SITE/arena" "$SITE/agents" "$SITE/btree" "$SITE/docs" "$SITE/assets"
 
 # Technical demo (WASM) lives at the site root: joltrinhq.com/
-cp demo/index.html demo/tailwind.css demo/sop.wasm demo/wasm_exec.js demo/404.html demo/favicon.svg demo/favicon.ico demo/og-image.png demo/logo-mark.png "$SITE/"
+cp demo/index.html demo/tailwind.css demo/sop.wasm demo/wasm_exec.js demo/404.html demo/favicon.svg demo/favicon.ico demo/og-image.png demo/logo-mark.png demo/robots.txt demo/sitemap.xml "$SITE/"
 # The documentation index lives at joltrinhq.com/docs/
 cp docs/index.html "$SITE/docs/"
 # The homepage loads its replay and videos from ./assets/. Every file there ships.
@@ -60,6 +60,14 @@ if ls "$SITE"/assets/*.mp4 "$SITE"/assets/*.webm "$SITE"/assets/*.mov >/dev/null
   echo "Error: video files must not be published in the site, use a YouTube link" >&2
   fail=1
 fi
+
+# Every page in the sitemap must be a real page in the site.
+for url in $(grep -oE '<loc>[^<]+</loc>' "$SITE/sitemap.xml" | sed -E 's|<loc>https://joltrinhq.com/?||; s|</loc>||'); do
+  if [ ! -f "$SITE/${url}index.html" ]; then
+    echo "Error: sitemap.xml lists /$url but $SITE/${url}index.html does not exist" >&2
+    fail=1
+  fi
+done
 
 [ "$fail" = 0 ] || exit 1
 echo "Site assembled in $SITE and every referenced file is present."
