@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/mail"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -403,9 +404,7 @@ func handleSimulateCheckout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if redirectURL == "" || !isSafeRelativeRedirect(redirectURL) {
-		redirectURL = "/app?checkout=success&tier=" + string(tier)
-	}
+	redirectURL = relativeRedirectOrDefault(redirectURL, "/app?checkout=success&tier="+url.QueryEscape(string(tier)))
 	http.Redirect(w, r, redirectURL, http.StatusFound)
 }
 
@@ -517,4 +516,19 @@ func handleBillingWebhook(w http.ResponseWriter, r *http.Request) {
 		"event_id": ev.ID,
 		"type":     ev.Type,
 	})
+}
+
+// relativeRedirectOrDefault returns target rebuilt from its parsed path and
+// query when it is a safe same-site path, and fallback otherwise. Rebuilding
+// from parsed parts means nothing the caller sent, such as a scheme or host,
+// can reach the Location header.
+func relativeRedirectOrDefault(target, fallback string) string {
+	if target == "" || !isSafeRelativeRedirect(target) {
+		return fallback
+	}
+	u, err := url.Parse(target)
+	if err != nil || u.Scheme != "" || u.Host != "" || !strings.HasPrefix(u.Path, "/") || strings.HasPrefix(u.Path, "//") {
+		return fallback
+	}
+	return (&url.URL{Path: u.Path, RawQuery: u.RawQuery}).String()
 }

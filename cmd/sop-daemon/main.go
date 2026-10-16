@@ -105,6 +105,10 @@ type config struct {
 	allowedOrigins map[string]bool
 	token          string
 	commandTimeout time.Duration
+	// allowedExecutables, when non-empty, limits which programs may run. A
+	// program is matched exactly as sent, so "kubectl" does not permit
+	// "/tmp/kubectl". Empty keeps the old behavior of running anything.
+	allowedExecutables map[string]bool
 }
 
 func main() {
@@ -113,13 +117,16 @@ func main() {
 		"Comma-separated origins allowed to call this daemon from a browser. A request carrying any other Origin is rejected.")
 	token := flag.String("token", os.Getenv("SOP_DAEMON_TOKEN"),
 		"Optional shared secret; when set, callers must send it in the "+tokenHeader+" header. Defaults to $SOP_DAEMON_TOKEN.")
+	allow := flag.String("allow-executables", os.Getenv("SOP_DAEMON_ALLOW_EXECUTABLES"),
+		"Optional comma-separated list of programs the daemon may run, matched exactly (for example kubectl,terraform). Empty allows any program. Defaults to $SOP_DAEMON_ALLOW_EXECUTABLES.")
 	timeout := flag.Duration("command-timeout", 60*time.Second, "Maximum wall-clock time a single command may run before it is killed.")
 	flag.Parse()
 
 	cfg := &config{
-		allowedOrigins: parseOrigins(*origins),
-		token:          *token,
-		commandTimeout: *timeout,
+		allowedOrigins:     parseOrigins(*origins),
+		token:              *token,
+		commandTimeout:     *timeout,
+		allowedExecutables: parseOrigins(*allow),
 	}
 
 	mux := http.NewServeMux()
@@ -138,6 +145,9 @@ func main() {
 
 	log.Printf("Starting SOP Desktop Daemon on %s", addr)
 	log.Printf("This daemon executes shell commands. Allowed browser origins: %s", strings.Join(sortedKeys(cfg.allowedOrigins), ", "))
+	if len(cfg.allowedExecutables) == 0 {
+		log.Printf("No -allow-executables set: any program can be run. Set it to limit the daemon to the programs you use.")
+	}
 	if cfg.token == "" {
 		log.Printf("No -token set: any local process can post commands here (it could also just run them directly). Set -token to require a shared secret.")
 	}
@@ -239,6 +249,11 @@ func executeHandler(cfg *config) http.HandlerFunc {
 			}
 			program = parts[0]
 			args = parts[1:]
+		}
+
+		if len(cfg.allowedExecutables) > 0 && !cfg.allowedExecutables[program] {
+			respondJSON(w, http.StatusForbidden, ExecuteResponse{Error: "Executable not in the allowlist: " + sanitizeLog(program)})
+			return
 		}
 
 		log.Printf("Executing: %s %v", sanitizeLog(program), sanitizeLogArgs(args))

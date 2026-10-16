@@ -21,3 +21,21 @@ func TestIsSafeRelativeRedirect_DelegatesToNetguard(t *testing.T) {
 		}
 	}
 }
+
+func TestRelativeRedirectOrDefault(t *testing.T) {
+	const fb = "/app?checkout=success&tier=pro"
+	cases := map[string]string{
+		"/app?x=1":              "/app?x=1",
+		"/billing/done":         "/billing/done",
+		"":                      fb,
+		"//evil.example/x":      fb,
+		"https://evil.example/": fb,
+		`/\evil.example`:        fb,
+		"javascript:alert(1)":   fb,
+	}
+	for in, want := range cases {
+		if got := relativeRedirectOrDefault(in, fb); got != want {
+			t.Errorf("relativeRedirectOrDefault(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
