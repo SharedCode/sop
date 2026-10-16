@@ -191,6 +191,14 @@ test.describe('Homepage', () => {
     expect(unsafe, 'external links must carry rel="noopener noreferrer"').toBe(0);
   });
 
+  test('pricing explains when to move to Pro and Enterprise', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    const pricing = page.locator('#pricing');
+    await expect(pricing).toContainText('Move to Pro when');
+    await expect(pricing).toContainText('Move to Enterprise when');
+    await expect(pricing.getByRole('link', { name: /try the barrier in your browser/i })).toBeVisible();
+  });
+
   test('pricing shows open source, Pro, and Enterprise contact without live-checkout claims', async ({ page }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     const pricing = page.locator('#pricing');
