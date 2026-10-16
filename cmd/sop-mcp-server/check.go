@@ -103,8 +103,11 @@ func diagnoseWorkflow(wf *verify.Workflow, maxChecks int) *checkDiagnostics {
 				d.Error = err.Error()
 				return d
 			}
-			st := tryStep{Step: string(step.ID), Decision: "blocked", Reason: v.Message, Next: wf.NextAction(v)}
+			st := tryStep{Step: string(step.ID), Decision: "blocked", Reason: v.Message, Next: verify.NextStopAndAsk}
 			st.RunFirst = establishers[v.MissingState]
+			if len(st.RunFirst) > 0 {
+				st.Next = verify.NextRunEstablishingSteps
+			}
 			blocked = append(blocked, st)
 			next = append(next, step)
 		}
