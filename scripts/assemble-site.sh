@@ -62,12 +62,43 @@ if ls "$SITE"/assets/*.mp4 "$SITE"/assets/*.webm "$SITE"/assets/*.mov >/dev/null
 fi
 
 # Every page in the sitemap must be a real page in the site.
-for url in $(grep -oE '<loc>[^<]+</loc>' "$SITE/sitemap.xml" | sed -E 's|<loc>https://joltrinhq.com/?||; s|</loc>||'); do
-  if [ ! -f "$SITE/${url}index.html" ]; then
-    echo "Error: sitemap.xml lists /$url but $SITE/${url}index.html does not exist" >&2
+sitemap_pages=0
+while IFS= read -r url; do
+  sitemap_pages=$((sitemap_pages + 1))
+  case "$url" in
+    https://joltrinhq.com|https://joltrinhq.com/) page="index.html" ;;
+    https://joltrinhq.com/*)
+      page="${url#https://joltrinhq.com/}"
+      page="${page%%[?#]*}"
+      page="${page%/}"
+      case "$page" in
+        "") page="index.html" ;;
+        *.html) ;;
+        *) page="$page/index.html" ;;
+      esac
+      ;;
+    *)
+      echo "Error: sitemap.xml lists an unexpected URL: $url" >&2
+      fail=1
+      continue
+      ;;
+  esac
+  case "/$page/" in
+    */../*|*/./*)
+      echo "Error: sitemap.xml lists a noncanonical path: $url" >&2
+      fail=1
+      continue
+      ;;
+  esac
+  if [ ! -f "$SITE/$page" ]; then
+    echo "Error: sitemap.xml lists $url but $SITE/$page does not exist" >&2
     fail=1
   fi
-done
+done < <(grep -oE '<loc>[^<]+</loc>' "$SITE/sitemap.xml" | sed -E 's|</?loc>||g')
+if [ "$sitemap_pages" = 0 ]; then
+  echo "Error: sitemap.xml contains no page URLs" >&2
+  fail=1
+fi
 
 [ "$fail" = 0 ] || exit 1
 echo "Site assembled in $SITE and every referenced file is present."
