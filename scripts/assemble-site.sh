@@ -14,7 +14,7 @@ rm -rf "$SITE"
 mkdir -p "$SITE/arena" "$SITE/agents" "$SITE/btree" "$SITE/docs" "$SITE/assets"
 
 # Technical demo (WASM) lives at the site root: joltrinhq.com/
-cp demo/index.html demo/tailwind.css demo/sop.wasm demo/wasm_exec.js demo/404.html demo/favicon.svg demo/favicon.ico demo/og-image.png demo/logo-mark.png "$SITE/"
+cp demo/index.html demo/tailwind.css demo/sop.wasm demo/wasm_exec.js demo/404.html demo/favicon.svg demo/favicon.ico demo/og-image.png demo/logo-mark.png demo/robots.txt demo/sitemap.xml "$SITE/"
 # The documentation index lives at joltrinhq.com/docs/
 cp docs/index.html "$SITE/docs/"
 # The homepage loads its replay and videos from ./assets/. Every file there ships.
@@ -58,6 +58,45 @@ if grep -nE '<video|\.(mp4|webm|mov)' "$SITE/index.html" "$SITE/agents/index.htm
 fi
 if ls "$SITE"/assets/*.mp4 "$SITE"/assets/*.webm "$SITE"/assets/*.mov >/dev/null 2>&1; then
   echo "Error: video files must not be published in the site, use a YouTube link" >&2
+  fail=1
+fi
+
+# Every page in the sitemap must be a real page in the site.
+sitemap_pages=0
+while IFS= read -r url; do
+  sitemap_pages=$((sitemap_pages + 1))
+  case "$url" in
+    https://joltrinhq.com|https://joltrinhq.com/) page="index.html" ;;
+    https://joltrinhq.com/*)
+      page="${url#https://joltrinhq.com/}"
+      page="${page%%[?#]*}"
+      case "$page" in
+        "") page="index.html" ;;
+        */) page="${page}index.html" ;;
+        *.html) ;;
+        *) page="$page/index.html" ;;
+      esac
+      ;;
+    *)
+      echo "Error: sitemap.xml lists an unexpected URL: $url" >&2
+      fail=1
+      continue
+      ;;
+  esac
+  case "/$page/" in
+    */../*|*/./*)
+      echo "Error: sitemap.xml lists a noncanonical path: $url" >&2
+      fail=1
+      continue
+      ;;
+  esac
+  if [ ! -f "$SITE/$page" ]; then
+    echo "Error: sitemap.xml lists $url but $SITE/$page does not exist" >&2
+    fail=1
+  fi
+done < <(grep -oE '<loc>[^<]+</loc>' "$SITE/sitemap.xml" | sed -E 's|</?loc>||g')
+if [ "$sitemap_pages" = 0 ]; then
+  echo "Error: sitemap.xml contains no page URLs" >&2
   fail=1
 fi
 
