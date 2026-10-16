@@ -43,17 +43,13 @@ const server = http.createServer((req, res) => {
   if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
     const indexPath = path.join(filePath, 'index.html');
     if (fs.existsSync(indexPath)) {
+      if (!parsedUrl.pathname.endsWith('/')) {
+        const location = parsedUrl.pathname.replace(/^\/+/, '/') + '/' + parsedUrl.search;
+        res.writeHead(301, { Location: location });
+        res.end();
+        return;
+      }
       filePath = indexPath;
-    }
-  }
-
-  // Redirect /arena -> /arena/ or /agents -> /agents/ for relative asset resolution
-  if (!fs.existsSync(filePath)) {
-    const asDirIndex = path.join(ROOT_DIR, urlPath, 'index.html');
-    if (fs.existsSync(asDirIndex)) {
-      res.writeHead(301, { Location: urlPath + '/' });
-      res.end();
-      return;
     }
   }
 
