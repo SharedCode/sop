@@ -56,10 +56,12 @@ if grep -nE '<video|\.(mp4|webm|mov)' "$SITE/index.html" "$SITE/agents/index.htm
   echo "Error: pages must embed videos from YouTube, not a local video file or <video> tag" >&2
   fail=1
 fi
-if ls "$SITE"/assets/*.mp4 "$SITE"/assets/*.webm "$SITE"/assets/*.mov >/dev/null 2>&1; then
-  echo "Error: video files must not be published in the site, use a YouTube link" >&2
-  fail=1
-fi
+for video in "$SITE"/assets/*.mp4 "$SITE"/assets/*.webm "$SITE"/assets/*.mov; do
+  if [ -f "$video" ]; then
+    echo "Error: video files must not be published in the site, use a YouTube link: $video" >&2
+    fail=1
+  fi
+done
 
 # Every page in the sitemap must be a real page in the site.
 sitemap_pages=0
