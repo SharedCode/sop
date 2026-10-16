@@ -73,6 +73,9 @@ jobs:
           npm ci
           npx playwright install --with-deps chromium
 
+      - name: Check malformed requests and site path boundaries
+        run: npm run test:site-server
+
       - name: Open every page of the assembled site
         env:
           CI: true

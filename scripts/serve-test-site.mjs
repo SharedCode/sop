@@ -28,12 +28,22 @@ const MIME_TYPES = {
 };
 
 const server = http.createServer((req, res) => {
-  const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
-  const urlPath = decodeURIComponent(parsedUrl.pathname);
+  let parsedUrl;
+  let urlPath;
+  try {
+    parsedUrl = new URL(req.url, 'http://127.0.0.1');
+    urlPath = decodeURIComponent(parsedUrl.pathname);
+    if (urlPath.includes('\0')) throw new Error('Invalid path');
+  } catch {
+    res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('Bad Request');
+    return;
+  }
   let filePath = path.join(ROOT_DIR, urlPath);
 
   // Security check: avoid directory traversal
-  if (!filePath.startsWith(ROOT_DIR)) {
+  const relativePath = path.relative(ROOT_DIR, filePath);
+  if (relativePath === '..' || relativePath.startsWith(`..${path.sep}`) || path.isAbsolute(relativePath)) {
     res.writeHead(403, { 'Content-Type': 'text/plain' });
     res.end('Forbidden');
     return;
