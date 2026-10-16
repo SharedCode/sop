@@ -228,3 +228,19 @@ func Test_TimeoutReturnsEvenIfAChildHoldsTheOutputOpen(t *testing.T) {
 		t.Errorf("want a timeout error, got %+v", resp)
 	}
 }
+
+func Test_AllowlistBlocksOtherExecutables(t *testing.T) {
+	cfg := testConfig()
+	cfg.allowedExecutables = map[string]bool{"echo": true}
+
+	if rec := post(t, cfg, "", "", "echo hi"); rec.Code != http.StatusOK {
+		t.Fatalf("allowed program should run, got %d: %s", rec.Code, rec.Body.String())
+	}
+	rec := post(t, cfg, "", "", "/bin/echo hi")
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("path form of an allowed name must be refused, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if rec := post(t, cfg, "", "", "ls"); rec.Code != http.StatusForbidden {
+		t.Fatalf("program outside the list must be refused, got %d", rec.Code)
+	}
+}
