@@ -26,7 +26,7 @@ test.describe('Homepage', () => {
   test('nothing covers the hero when the icon CDN is unreachable', async ({ page }) => {
     // The boot overlay once stayed up for good after the icon script failed to load,
     // and the homepage was a black screen that still answered 200.
-    await page.route(/unpkg\.com/, (route) => route.abort());
+    await page.route(/^https:\/\/unpkg\.com\//, (route) => route.abort());
     await page.goto('/', { waitUntil: 'load' });
     const h1 = page.getByRole('heading', { level: 1 });
     await expect(h1).toBeVisible();
