@@ -9,6 +9,24 @@ import (
 	"github.com/sharedcode/joltrin/v5/verify"
 )
 
+func Test_RegisterWorkflow_RejectsUnestablishedReachabilityTarget(t *testing.T) {
+	store := New()
+	wf, err := verify.NewWorkflow([]verify.Step{
+		{ID: "inspect_rollback", Requires: []verify.State{"rollback_complete"}},
+	}, nil, []verify.ReachabilityRule{
+		{Name: "rollback-always-reachable", Target: "rollback_complete"},
+	})
+	if err != nil {
+		t.Fatalf("NewWorkflow: %v", err)
+	}
+	if err := store.RegisterWorkflow("broken-rollback", wf); err == nil {
+		t.Fatal("expected registration to reject a rollback target no step establishes")
+	}
+	if _, ok := store.Workflow("broken-rollback"); ok {
+		t.Fatal("invalid workflow was registered")
+	}
+}
+
 func Test_WorkflowNames_SortedAndEmptyWhenNoneRegistered(t *testing.T) {
 	store := New()
 	if got := store.WorkflowNames(); len(got) != 0 {

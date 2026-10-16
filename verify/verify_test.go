@@ -103,6 +103,24 @@ func Test_VerifyReachability_PassesOnWellFormedWorkflow(t *testing.T) {
 	}
 }
 
+func Test_VerifyReachability_RejectsTargetOnlyRequiredBySteps(t *testing.T) {
+	wf, err := NewWorkflow([]Step{
+		{ID: "inspect_rollback", Requires: []State{"rollback_complete"}},
+	}, nil, []ReachabilityRule{
+		{Name: "rollback-always-reachable", Target: "rollback_complete"},
+	})
+	if err != nil {
+		t.Fatalf("NewWorkflow: %v", err)
+	}
+	err = wf.VerifyReachability()
+	if err == nil {
+		t.Fatal("expected rejection: no step can establish rollback_complete")
+	}
+	if !strings.Contains(err.Error(), "rollback_complete") || !strings.Contains(err.Error(), "no step establishes") {
+		t.Fatalf("expected the missing target producer in the error, got: %v", err)
+	}
+}
+
 // Test_VerifyReachability_CatchesADeadEnd removes the recovery path from a
 // degraded-infra state, so infra_degraded can no longer reach
 // rollback_complete, and confirms VerifyReachability actually catches it
