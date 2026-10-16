@@ -109,9 +109,14 @@ type config struct {
 	token          string
 	commandTimeout time.Duration
 	// allowedExecutables maps exact configured request names to executable paths
-	// resolved at startup. An empty map permits no execution. Only map values,
-	// never request-provided names, may be passed to exec.CommandContext.
-	allowedExecutables map[string]string
+	// and invocation names resolved at startup. An empty map permits no execution.
+	// Requests may select entries but never supply their paths or invocation names.
+	allowedExecutables map[string]configuredExecutable
+}
+
+type configuredExecutable struct {
+	path  string
+	argv0 string
 }
 
 func main() {
@@ -166,8 +171,8 @@ func main() {
 // PATH entries and symlinks now so later requests cannot select another binary
 // by changing PATH or the configured symlink. The operator must still protect
 // the resolved executable and its directories from replacement.
-func resolveExecutables(csv string) (map[string]string, error) {
-	out := make(map[string]string)
+func resolveExecutables(csv string) (map[string]configuredExecutable, error) {
+	out := make(map[string]configuredExecutable)
 	for _, name := range strings.Split(csv, ",") {
 		name = strings.TrimSpace(name)
 		if name == "" {
@@ -185,7 +190,7 @@ func resolveExecutables(csv string) (map[string]string, error) {
 		if err != nil {
 			return nil, fmt.Errorf("cannot resolve symlinks for %q: %w", name, err)
 		}
-		out[name] = path
+		out[name] = configuredExecutable{path: path, argv0: name}
 	}
 	if len(out) == 0 {
 		return nil, fmt.Errorf("set -allow-executables or SOP_DAEMON_ALLOW_EXECUTABLES to the programs callers may run")
@@ -288,19 +293,23 @@ func executeHandler(cfg *config) http.HandlerFunc {
 		}
 
 		trustedProgram, allowed := cfg.allowedExecutables[program]
-		if !allowed || trustedProgram == "" {
+		if !allowed || trustedProgram.path == "" || trustedProgram.argv0 == "" {
 			respondJSON(w, http.StatusForbidden, ExecuteResponse{Error: "Executable not in the allowlist: " + sanitizeLog(program)})
 			return
 		}
 
-		log.Printf("Executing configured program: %s %v", sanitizeLog(trustedProgram), sanitizeLogArgs(args))
+		log.Printf("Executing configured program: %s %v", sanitizeLog(trustedProgram.path), sanitizeLogArgs(args))
 
 		// Bound the run: a command that never exits would otherwise pin this
 		// handler (and its goroutine) forever.
 		ctx, cancel := context.WithTimeout(r.Context(), cfg.commandTimeout)
 		defer cancel()
 
-		cmd := exec.CommandContext(ctx, trustedProgram, args...)
+		cmd := exec.CommandContext(ctx, trustedProgram.path, args...)
+		// Multicall executables such as BusyBox select an applet using argv[0].
+		// Preserve the configured invocation while Cmd.Path stays pinned to the
+		// resolved binary; neither value is taken from the request.
+		cmd.Args[0] = trustedProgram.argv0
 		cmd.Env = childEnv()
 		cmd.WaitDelay = killWait
 

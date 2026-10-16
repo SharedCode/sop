@@ -31,6 +31,8 @@ stored paths. Later `PATH` changes or changes to a configured symlink cannot
 select a different executable. Restart after intentionally changing a tool's
 location. Protect the resolved files and their parent directories against
 replacement; this policy does not pin file contents or sandbox child processes.
+The configured entry is preserved as `argv[0]`, so multicall programs such as
+BusyBox retain their selected applet while the executable path stays pinned.
 
 Arguments are passed directly without a shell. Pipes, redirects, substitutions,
 and chaining are literal text unless the selected program interprets them.

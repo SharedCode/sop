@@ -142,6 +142,9 @@ func TestMain(m *testing.M) {
 	case "env":
 		fmt.Print(os.Getenv("SOP_DAEMON_TOKEN"), "|", os.Getenv("KEEP_ME"))
 		os.Exit(0)
+	case "argv0":
+		fmt.Print(os.Args[0])
+		os.Exit(0)
 	case "orphan":
 		// Start a child that holds the output pipe open and outlives this process,
 		// then wait to be killed by the timeout.
@@ -253,7 +256,7 @@ func Test_AllowlistBlocksOtherExecutables(t *testing.T) {
 
 func Test_MissingExecutableAllowlistFailsClosed(t *testing.T) {
 	for _, body := range []string{`{"command":"echo must-not-run"}`, `{"executable":"echo","args":["must-not-run"]}`} {
-		for _, configured := range []map[string]string{nil, {}} {
+		for _, configured := range []map[string]configuredExecutable{nil, {}} {
 			cfg := testConfig(t)
 			cfg.allowedExecutables = configured
 			req := httptest.NewRequest(http.MethodPost, "/api/execute", strings.NewReader(body))
@@ -289,7 +292,7 @@ func Test_ResolveExecutablesRejectsMissingOrUnavailablePrograms(t *testing.T) {
 
 func Test_ExecutableRequestsUseTheConfiguredProgram(t *testing.T) {
 	cfg := testConfig(t)
-	for _, executable := range []string{"echo", cfg.allowedExecutables["echo"]} {
+	for _, executable := range []string{"echo", cfg.allowedExecutables["echo"].path} {
 		body, err := json.Marshal(ExecuteRequest{Executable: executable, Args: []string{"literal; $(no-shell)"}})
 		if err != nil {
 			t.Fatal(err)
@@ -341,5 +344,39 @@ func Test_ConfiguredSymlinkIsResolvedBeforeRequests(t *testing.T) {
 	}
 	if rec.Code != http.StatusOK || resp.Error != "" || strings.TrimSpace(resp.Stdout) != "pinned-symlink" {
 		t.Fatalf("replacing the configured symlink must not select another executable: %+v", resp)
+	}
+}
+
+func Test_ConfiguredSymlinkPreservesArgv0AndPinnedPath(t *testing.T) {
+	alias := filepath.Join(t.TempDir(), "configured-helper")
+	if err := os.Symlink(os.Args[0], alias); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	cfg := testConfig(t)
+	var err error
+	cfg.allowedExecutables, err = resolveExecutables(alias)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Repoint the configured name at an invalid program after startup. The
+	// original helper must still run with its configured invocation name.
+	replacement := filepath.Join(t.TempDir(), "replacement")
+	if err := os.WriteFile(replacement, []byte("invalid executable"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(alias); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(replacement, alias); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SOP_DAEMON_TEST_HELPER", "argv0")
+	rec := post(t, cfg, "", "", fmt.Sprintf("%q", alias))
+	var resp ExecuteResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if rec.Code != http.StatusOK || resp.Error != "" || resp.Stdout != alias {
+		t.Fatalf("configured invocation name and executable must both be preserved: %+v", resp)
 	}
 }
