@@ -123,3 +123,81 @@ func TestHandleCreateEnvironment_RejectsPathTraversal(t *testing.T) {
 		t.Fatalf("handleCreateEnvironment() status = %d, want %d, body = %s", rec.Code, http.StatusBadRequest, rec.Body.String())
 	}
 }
+
+func TestValidateEnvironmentFilename(t *testing.T) {
+	for _, name := range []string{"", ".", "..", "../outside.json", "nested/config.json", `/tmp/config.json`, `..\outside.json`, `nested\config.json`, "config\x00.json"} {
+		if got, err := validateEnvironmentFilename(name); err == nil {
+			t.Errorf("accepted %q as %q", name, got)
+		}
+	}
+	for _, name := range []string{"config.json", "team prod.json", "prod", "release..json"} {
+		got, err := validateEnvironmentFilename("  " + name + "  ")
+		if err != nil || got != name {
+			t.Errorf("filename %q: got %q err=%v", name, got, err)
+		}
+	}
+}
+
+func TestEnvironmentHandlersRejectNonBasenames(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("SOP_ROOT", "")
+	oldCatalog := modelCatalog
+	t.Cleanup(func() { modelCatalog = oldCatalog })
+	for _, handler := range []struct {
+		name, field string
+		serve       http.HandlerFunc
+	}{
+		{"create", "name", handleCreateEnvironment},
+		{"switch", "filename", handleSwitchEnvironment},
+		{"delete", "filename", handleDeleteEnvironment},
+	} {
+		for _, name := range []string{"../outside.json", `..\outside.json`, "bad\x00.json"} {
+			t.Run(handler.name+"/"+name, func(t *testing.T) {
+				old := config
+				t.Cleanup(func() { config = old })
+				config = Config{ConfigFile: "unchanged.json"}
+				body, err := json.Marshal(map[string]string{handler.field: name})
+				if err != nil {
+					t.Fatal(err)
+				}
+				rec := httptest.NewRecorder()
+				handler.serve(rec, httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(body)))
+				if rec.Code != http.StatusBadRequest {
+					t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+				}
+				if config.ConfigFile != "unchanged.json" {
+					t.Fatal("rejected filename changed active config")
+				}
+			})
+		}
+	}
+}
+
+func TestEnvironmentHandlersAcceptBareFilenames(t *testing.T) {
+	oldConfig, oldCatalog := config, modelCatalog
+	t.Cleanup(func() { config, modelCatalog = oldConfig, oldCatalog })
+	t.Chdir(t.TempDir())
+	t.Setenv("SOP_ROOT", "")
+	if err := os.WriteFile("existing.json", []byte(`{"port":8081}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, request := range []struct {
+		name, body string
+		serve      http.HandlerFunc
+		status     int
+	}{
+		{"create", `{"name":"new-team"}`, handleCreateEnvironment, http.StatusOK},
+		{"switch", `{"filename":"existing.json"}`, handleSwitchEnvironment, http.StatusOK},
+	} {
+		t.Run(request.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			request.serve(rec, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(request.body)))
+			if rec.Code != request.status {
+				t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+			}
+		})
+	}
+	if config.ConfigFile != "existing.json" {
+		t.Fatalf("active config=%q", config.ConfigFile)
+	}
+}

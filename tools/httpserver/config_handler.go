@@ -790,10 +790,15 @@ func validateEnvironmentFilename(name string) (string, error) {
 	if name == "." || name == ".." {
 		return "", fmt.Errorf("invalid filename %q", name)
 	}
-	if filepath.IsAbs(name) || filepath.Base(name) != name {
+	if strings.ContainsRune(name, '\x00') {
+		return "", fmt.Errorf("invalid filename: NUL bytes are not allowed")
+	}
+	if strings.ContainsAny(name, `/\`) || filepath.IsAbs(name) || filepath.Base(name) != name {
 		return "", fmt.Errorf("invalid filename %q: must be a bare filename with no path separators", name)
 	}
-	return name, nil
+	// Return the canonical basename rather than the request value. Keep this
+	// boundary explicit for every downstream filesystem use of the config name.
+	return filepath.Base(name), nil
 }
 
 // sanitizePath removes leading/trailing whitespace and non-graphic characters
