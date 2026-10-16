@@ -70,9 +70,9 @@ while IFS= read -r url; do
     https://joltrinhq.com/*)
       page="${url#https://joltrinhq.com/}"
       page="${page%%[?#]*}"
-      page="${page%/}"
       case "$page" in
         "") page="index.html" ;;
+        */) page="${page}index.html" ;;
         *.html) ;;
         *) page="$page/index.html" ;;
       esac
