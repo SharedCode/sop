@@ -321,7 +321,7 @@ func Test_ConfiguredSymlinkIsResolvedBeforeRequests(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	alias := filepath.Join(t.TempDir(), "configured-echo")
+	alias := filepath.Join(t.TempDir(), "configured-echo"+filepath.Ext(echo))
 	if err := os.Symlink(echo, alias); err != nil {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
@@ -348,7 +348,7 @@ func Test_ConfiguredSymlinkIsResolvedBeforeRequests(t *testing.T) {
 }
 
 func Test_ConfiguredSymlinkPreservesArgv0AndPinnedPath(t *testing.T) {
-	alias := filepath.Join(t.TempDir(), "configured-helper")
+	alias := filepath.Join(t.TempDir(), "configured-helper"+filepath.Ext(os.Args[0]))
 	if err := os.Symlink(os.Args[0], alias); err != nil {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
