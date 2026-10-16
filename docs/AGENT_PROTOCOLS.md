@@ -161,6 +161,10 @@ The built-in `db-maintenance` runbook is only an example. Describe your own step
 
 Run `sop-mcp-server check runbooks.json` first to see what the file enforces, or the reason it will not load. `setup` runs the same check and refuses a file the server could not start with.
 
+Use `sop-mcp-server check --diagnose runbooks.json` to find a runnable order and steps that cannot run from a fresh trace. A file can load while its steps depend on each other in a cycle or its safety rules prevent progress. Diagnostics use the actual barrier checks, print blocked reasons and the steps that establish missing states, and exit 1 if any step remains blocked. Fix the prerequisites or safety rules and rerun the check.
+
+Add `--json` for `workflows[].diagnostics.runnable_order` and `blocked` decisions. The top-level `valid` field still means the file loads. Each workflow has a limit of 100,000 barrier checks; hitting it exits 1 with `diagnostics.error` and a partial runnable order, without claiming the remaining steps are blocked. Diagnostics simulate declared state changes in memory, execute no tools, and do not validate external evidence or prove the reachability rules.
+
 To test it without an agent, `sop-mcp-server try runbooks.json deploy deploy_prod run_tests` replays a list of steps against one workflow and prints which the barrier allows, which it blocks and why, and what to run first. It exits 1 if any step is blocked, so it can sit in CI as a test for the runbook.
 
 With a file, the server serves exactly those runbooks. It refuses a file with a typo, such as an unknown field or a state that no step establishes, instead of quietly never blocking anything.
@@ -175,7 +179,7 @@ What this catches: an agent that skips a required step, breaks a safety rule, or
 | :--- | :--- |
 | `sop-mcp-server` (or `stdio`, `serve`) | Serve the barrier over MCP on stdin and stdout. |
 | `sop-mcp-server setup [--apply] [--lessons DIR] [--runbooks FILE]` | Print, or with `--apply` run, the commands that register the server with Claude Code, Codex and the Gemini CLI by its full path. It can be run again. A runbook file that does not load is refused. |
-| `sop-mcp-server check [--json] FILE` | Load a runbook file and show what it enforces, or why it does not load. `--json` prints one JSON document, including the error when the file is invalid. |
+| `sop-mcp-server check [--json] [--diagnose] FILE` | Load a runbook file and show what it enforces, or why it does not load. `--json` prints one JSON document, including the error when the file is invalid. `--diagnose` also simulates a fresh trace and exits 1 for blocked steps or incomplete diagnostics. |
 | `sop-mcp-server try [--json] FILE WORKFLOW STEP...` | Replay steps in order against a runbook, in one fresh run, and show which are allowed or blocked. A blocked step changes nothing and the replay goes on. Exit 0 if all are allowed, 1 if any is blocked, 2 for an unknown workflow or step. |
 | `sop-mcp-server demo [--json]` | Watch the barrier block a database drop until a backup is validated. It needs no agent. `--json` prints each decision. |
 | `sop-mcp-server version` | Print the version. A published binary reports its release tag, and a build from a working copy reports `dev`. |

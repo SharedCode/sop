@@ -2,10 +2,13 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/sharedcode/joltrin/v5/verify"
 )
 
 const goodRunbook = `{
@@ -104,5 +107,101 @@ func TestSetupAcceptsARunbookFileThatLoads(t *testing.T) {
 	}
 	if len(rec.calls) == 0 {
 		t.Error("a valid file should still be registered")
+	}
+}
+
+// Each state has a producer, so this file loads, but neither step can start.
+const cyclicRunbook = `{"workflows":{"cycle":{"steps":[
+  {"id":"a","requires":["b_done"],"establishes":["a_done"]},
+  {"id":"b","requires":["a_done"],"establishes":["b_done"]}
+]}}}`
+
+func TestCheckDiagnoseFindsDependencyCycle(t *testing.T) {
+	p := writeRunbook(t, cyclicRunbook)
+	if code, _, errw := check(t, p); code != 0 {
+		t.Fatalf("load check: %d %s", code, errw)
+	}
+	code, out, errw := check(t, "--diagnose", p)
+	if code != 1 {
+		t.Fatalf("diagnose exit %d, want 1; out=%s err=%s", code, out, errw)
+	}
+	for _, want := range []string{"BLOCKED", "a", "b", "b_done", "run first: b"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q: %s", want, out)
+		}
+	}
+}
+
+func TestCheckDiagnoseFindsRunnableOrder(t *testing.T) {
+	code, out, errw := check(t, "--json", "--diagnose", writeRunbook(t, goodRunbook))
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errw)
+	}
+	var result struct {
+		Valid     bool `json:"valid"`
+		Workflows []struct {
+			Diagnostics struct {
+				RunnableOrder []string          `json:"runnable_order"`
+				Blocked       []json.RawMessage `json:"blocked"`
+			} `json:"diagnostics"`
+		} `json:"workflows"`
+	}
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatal(err)
+	}
+	if !result.Valid || len(result.Workflows) != 1 {
+		t.Fatalf("unexpected result: %s", out)
+	}
+	d := result.Workflows[0].Diagnostics
+	if strings.Join(d.RunnableOrder, ",") != "run_tests,get_approval,deploy_prod" || len(d.Blocked) != 0 {
+		t.Fatalf("unexpected diagnostics: %s", out)
+	}
+}
+
+func TestCheckDiagnoseHonorsSafetyRules(t *testing.T) {
+	p := writeRunbook(t, `{"workflows":{"unsafe":{"steps":[
+ {"id":"approve_and_deploy","establishes":["approved","deployed"]}
+ ],"safety":[{"name":"approval-first","forbidden":"deployed","requires":"approved"}]}}}`)
+	code, out, errw := check(t, p, "--diagnose", "--json")
+	if code != 1 || !strings.Contains(out, "approval-first") || !strings.Contains(out, "approve_and_deploy") {
+		t.Fatalf("exit %d out=%s err=%s", code, out, errw)
+	}
+	var res map[string]any
+	if err := json.Unmarshal([]byte(out), &res); err != nil {
+		t.Fatal(err)
+	}
+	if res["valid"] != true {
+		t.Fatalf("load validity changed: %s", out)
+	}
+}
+
+func TestCheckDiagnosticsStopsAtItsBudget(t *testing.T) {
+	wf, err := verify.NewWorkflow([]verify.Step{
+		{ID: "first", Establishes: []verify.State{"ready"}},
+		{ID: "second", Requires: []verify.State{"ready"}},
+	}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := diagnoseWorkflow(wf, 1)
+	if !strings.Contains(d.Error, "limit reached after 1 checks") || len(d.RunnableOrder) != 1 || len(d.Blocked) != 0 {
+		t.Fatalf("incomplete diagnostics must not claim steps are blocked: %+v", d)
+	}
+	// Diagnostics must not retain state between invocations.
+	complete := diagnoseWorkflow(wf, 10)
+	if complete.Error != "" || strings.Join(complete.RunnableOrder, ",") != "first,second" {
+		t.Fatalf("%+v", complete)
+	}
+}
+
+func TestCheckDiagnosticsRetriesEarlierBlockedSteps(t *testing.T) {
+	p := writeRunbook(t, `{"workflows":{"deploy":{"steps":[
+ {"id":"start","establishes":["started"]},
+ {"id":"a_finish","requires":["ready"],"establishes":["finished"]},
+ {"id":"z_prepare","requires":["started"],"establishes":["ready"]}
+ ]}}}`)
+	code, out, errw := check(t, p, "--diagnose")
+	if code != 0 || !strings.Contains(out, "runnable order: start -> z_prepare -> a_finish") {
+		t.Fatalf("exit %d out=%s err=%s", code, out, errw)
 	}
 }
