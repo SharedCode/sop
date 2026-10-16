@@ -8,15 +8,22 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
 
-func testConfig() *config {
+func testConfig(t *testing.T) *config {
+	t.Helper()
+	executables, err := resolveExecutables("echo," + os.Args[0])
+	if err != nil {
+		t.Fatal(err)
+	}
 	return &config{
-		allowedOrigins: parseOrigins("http://localhost:8080,http://127.0.0.1:8080"),
-		commandTimeout: 10 * time.Second,
+		allowedOrigins:     parseOrigins("http://localhost:8080,http://127.0.0.1:8080"),
+		commandTimeout:     10 * time.Second,
+		allowedExecutables: executables,
 	}
 }
 
@@ -46,7 +53,7 @@ func jsonString(s string) string {
 // page the user visited could POST here and run shell commands. A hostile
 // origin must now be refused before the command ever reaches a shell.
 func Test_DriveByOriginIsRejected(t *testing.T) {
-	cfg := testConfig()
+	cfg := testConfig(t)
 	rec := post(t, cfg, "https://evil.example", "", "echo pwned")
 
 	if rec.Code != http.StatusForbidden {
@@ -63,7 +70,7 @@ func Test_DriveByOriginIsRejected(t *testing.T) {
 // Test_NoWildcardCORS pins the specific header that made the drive-by
 // possible: the response must echo one allowed origin, never "*".
 func Test_NoWildcardCORS(t *testing.T) {
-	cfg := testConfig()
+	cfg := testConfig(t)
 	rec := post(t, cfg, "http://localhost:8080", "", "echo ok")
 
 	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "http://localhost:8080" {
@@ -77,7 +84,7 @@ func Test_NoWildcardCORS(t *testing.T) {
 // Test_AllowedOriginStillWorks confirms the fix doesn't break the SOP UI,
 // which posts here from the httpserver page on localhost:8080.
 func Test_AllowedOriginStillWorks(t *testing.T) {
-	cfg := testConfig()
+	cfg := testConfig(t)
 	rec := post(t, cfg, "http://127.0.0.1:8080", "", "echo hello-from-daemon")
 
 	if rec.Code != http.StatusOK {
@@ -95,7 +102,7 @@ func Test_AllowedOriginStillWorks(t *testing.T) {
 // Test_TokenEnforcedWhenSet covers the defense-in-depth path for callers
 // that send no Origin at all (curl, other local tooling).
 func Test_TokenEnforcedWhenSet(t *testing.T) {
-	cfg := testConfig()
+	cfg := testConfig(t)
 	cfg.token = "s3cret"
 
 	if rec := post(t, cfg, "", "", "echo nope"); rec.Code != http.StatusUnauthorized {
@@ -112,7 +119,7 @@ func Test_TokenEnforcedWhenSet(t *testing.T) {
 // Test_OversizedBodyRejected confirms the MaxBytesReader cap: an unbounded
 // JSON body was previously decoded straight into memory.
 func Test_OversizedBodyRejected(t *testing.T) {
-	cfg := testConfig()
+	cfg := testConfig(t)
 	rec := post(t, cfg, "http://localhost:8080", "", strings.Repeat("A", maxRequestBody+1024))
 
 	if rec.Code != http.StatusBadRequest {
@@ -170,7 +177,7 @@ func postExec(t *testing.T, cfg *config, env map[string]string) ExecuteResponse 
 // A command that prints without end must not be able to fill the daemon's
 // memory or produce a response of the same size.
 func Test_OutputIsCapped(t *testing.T) {
-	resp := postExec(t, testConfig(), map[string]string{"SOP_DAEMON_TEST_HELPER": "flood"})
+	resp := postExec(t, testConfig(t), map[string]string{"SOP_DAEMON_TEST_HELPER": "flood"})
 	if len(resp.Stdout) > maxCapturedOutput || len(resp.Stderr) > maxCapturedOutput {
 		t.Fatalf("captured %d bytes of stdout and %d of stderr, cap is %d", len(resp.Stdout), len(resp.Stderr), maxCapturedOutput)
 	}
@@ -187,7 +194,7 @@ func Test_OutputIsCapped(t *testing.T) {
 
 // Output under the cap is returned whole and is not marked truncated.
 func Test_ShortOutputIsNotTruncated(t *testing.T) {
-	rec := post(t, testConfig(), "", "", "echo small")
+	rec := post(t, testConfig(t), "", "", "echo small")
 	var resp ExecuteResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
@@ -200,7 +207,7 @@ func Test_ShortOutputIsNotTruncated(t *testing.T) {
 // The shared secret that protects the daemon must not be handed to the
 // commands it runs.
 func Test_TokenIsNotPassedToCommands(t *testing.T) {
-	cfg := testConfig()
+	cfg := testConfig(t)
 	resp := postExec(t, cfg, map[string]string{
 		"SOP_DAEMON_TEST_HELPER": "env",
 		"SOP_DAEMON_TOKEN":       "do-not-leak",
@@ -217,7 +224,7 @@ func Test_TokenIsNotPassedToCommands(t *testing.T) {
 // A command that leaves a child holding its output open used to keep the
 // request waiting long after the timeout killed the command.
 func Test_TimeoutReturnsEvenIfAChildHoldsTheOutputOpen(t *testing.T) {
-	cfg := testConfig()
+	cfg := testConfig(t)
 	cfg.commandTimeout = 300 * time.Millisecond
 	start := time.Now()
 	resp := postExec(t, cfg, map[string]string{"SOP_DAEMON_TEST_HELPER": "orphan"})
@@ -230,8 +237,7 @@ func Test_TimeoutReturnsEvenIfAChildHoldsTheOutputOpen(t *testing.T) {
 }
 
 func Test_AllowlistBlocksOtherExecutables(t *testing.T) {
-	cfg := testConfig()
-	cfg.allowedExecutables = map[string]bool{"echo": true}
+	cfg := testConfig(t)
 
 	if rec := post(t, cfg, "", "", "echo hi"); rec.Code != http.StatusOK {
 		t.Fatalf("allowed program should run, got %d: %s", rec.Code, rec.Body.String())
@@ -242,5 +248,98 @@ func Test_AllowlistBlocksOtherExecutables(t *testing.T) {
 	}
 	if rec := post(t, cfg, "", "", "ls"); rec.Code != http.StatusForbidden {
 		t.Fatalf("program outside the list must be refused, got %d", rec.Code)
+	}
+}
+
+func Test_MissingExecutableAllowlistFailsClosed(t *testing.T) {
+	for _, body := range []string{`{"command":"echo must-not-run"}`, `{"executable":"echo","args":["must-not-run"]}`} {
+		for _, configured := range []map[string]string{nil, {}} {
+			cfg := testConfig(t)
+			cfg.allowedExecutables = configured
+			req := httptest.NewRequest(http.MethodPost, "/api/execute", strings.NewReader(body))
+			rec := httptest.NewRecorder()
+			cfg.guard(executeHandler(cfg))(rec, req)
+			if rec.Code != http.StatusForbidden {
+				t.Errorf("missing allowlist must deny %s, got %d: %s", body, rec.Code, rec.Body.String())
+			}
+		}
+	}
+}
+
+func Test_ConfiguredProgramIgnoresLaterPATHChanges(t *testing.T) {
+	cfg := testConfig(t)
+	t.Setenv("PATH", t.TempDir())
+	rec := post(t, cfg, "", "", "echo pinned-program")
+	var resp ExecuteResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Error != "" || !strings.Contains(resp.Stdout, "pinned-program") {
+		t.Fatalf("configured executable must remain available after PATH changes: %+v", resp)
+	}
+}
+
+func Test_ResolveExecutablesRejectsMissingOrUnavailablePrograms(t *testing.T) {
+	for _, input := range []string{"", " , ", filepath.Join(t.TempDir(), "missing-program"), "echo," + filepath.Join(t.TempDir(), "missing-program")} {
+		if programs, err := resolveExecutables(input); err == nil || len(programs) != 0 {
+			t.Errorf("invalid configuration %q must fail entirely: programs=%v err=%v", input, programs, err)
+		}
+	}
+}
+
+func Test_ExecutableRequestsUseTheConfiguredProgram(t *testing.T) {
+	cfg := testConfig(t)
+	for _, executable := range []string{"echo", cfg.allowedExecutables["echo"]} {
+		body, err := json.Marshal(ExecuteRequest{Executable: executable, Args: []string{"literal; $(no-shell)"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		req := httptest.NewRequest(http.MethodPost, "/api/execute", bytes.NewReader(body))
+		rec := httptest.NewRecorder()
+		cfg.guard(executeHandler(cfg))(rec, req)
+		if executable != "echo" {
+			if rec.Code != http.StatusForbidden {
+				t.Fatalf("unconfigured absolute alias must be denied, got %d: %s", rec.Code, rec.Body.String())
+			}
+			continue
+		}
+		var resp ExecuteResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatal(err)
+		}
+		if rec.Code != http.StatusOK || resp.Error != "" || strings.TrimSpace(resp.Stdout) != "literal; $(no-shell)" {
+			t.Fatalf("configured program must receive literal arguments, got %d: %+v", rec.Code, resp)
+		}
+	}
+}
+
+func Test_ConfiguredSymlinkIsResolvedBeforeRequests(t *testing.T) {
+	echo, err := exec.LookPath("echo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(t.TempDir(), "configured-echo")
+	if err := os.Symlink(echo, alias); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	cfg := testConfig(t)
+	cfg.allowedExecutables, err = resolveExecutables(alias)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(alias); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(os.Args[0], alias); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SOP_DAEMON_TEST_HELPER", "env")
+	rec := post(t, cfg, "", "", fmt.Sprintf("%q pinned-symlink", alias))
+	var resp ExecuteResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if rec.Code != http.StatusOK || resp.Error != "" || strings.TrimSpace(resp.Stdout) != "pinned-symlink" {
+		t.Fatalf("replacing the configured symlink must not select another executable: %+v", resp)
 	}
 }
