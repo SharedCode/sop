@@ -1523,7 +1523,7 @@ Error from server: admission webhook "gate.joltrin.dev" denied the request: step
             <ul class="space-y-2 text-xs text-slate-300 mb-6">
               <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-accent-violet shrink-0"></i><span>Everything in Pro</span></li>
               <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-accent-violet shrink-0"></i><span>Okta and Microsoft Entra ID sign-in</span></li>
-              <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-accent-violet shrink-0"></i><span>Custom CEL policy rules</span></li>
+              <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-accent-violet shrink-0"></i><span>Custom safety rules for your runbooks</span></li>
               <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-accent-violet shrink-0"></i><span>Compliance audit exports</span></li>
             </ul>
           </div>
@@ -1531,6 +1531,24 @@ Error from server: admission webhook "gate.joltrin.dev" denied the request: step
                   class="w-full py-2.5 px-4 rounded-xl bg-dark-800 hover:bg-dark-750 border border-dark-700 hover:border-accent-violet/50 text-slate-200 hover:text-white font-semibold text-xs flex items-center justify-center transition cursor-pointer">
             Talk to us
           </button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        <div class="bg-dark-900 border border-dark-800 rounded-2xl p-5">
+          <h3 class="text-xs font-mono font-semibold uppercase tracking-wider text-slate-400 mb-2">Start free</h3>
+          <p class="text-xs text-slate-300 leading-relaxed">One developer, one agent, no account. Run the barrier on your own runbook and watch it block a bad step and say what to do next.</p>
+          <a href="./agents/" class="text-xs text-brand-400 hover:underline inline-block mt-3" style="padding-block:.4rem">Try the barrier in your browser</a>
+        </div>
+        <div class="bg-dark-900 border border-brand-500/40 rounded-2xl p-5">
+          <h3 class="text-xs font-mono font-semibold uppercase tracking-wider text-brand-400 mb-2">Move to Pro when</h3>
+          <p class="text-xs text-slate-300 leading-relaxed">More than one person edits runbooks and policies, and you want one place for them plus a record of who changed what. Policy compilation, the hash-chained audit log, and team workspaces are in the governance package in the public repo today.</p>
+          <a href="https://github.com/SharedCode/joltrin/blob/master/docs/MONETIZATION_AND_TIERS.md" target="_blank" rel="noopener noreferrer" class="text-xs text-brand-400 hover:underline inline-block mt-3" style="padding-block:.4rem">What is built and what is not</a>
+        </div>
+        <div class="bg-dark-900 border border-accent-violet/30 rounded-2xl p-5">
+          <h3 class="text-xs font-mono font-semibold uppercase tracking-wider text-accent-violet mb-2">Move to Enterprise when</h3>
+          <p class="text-xs text-slate-300 leading-relaxed">Security or compliance asks for single sign-on, signed audit records, and a named owner for production approvals. Okta and Entra ID support and audit signing exist as building blocks; we scope the rollout with each team instead of promising a checklist.</p>
+          <button onclick="selectTierAndScroll('enterprise')" class="text-xs text-accent-violet hover:underline mt-3 cursor-pointer" style="padding-block:.4rem">Tell us what you need</button>
         </div>
       </div>
 
