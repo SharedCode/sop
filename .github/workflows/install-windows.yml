@@ -20,10 +20,12 @@ jobs:
     name: install.ps1 on Windows
     runs-on: windows-latest
     timeout-minutes: 15
-    env:
-      JOLTRIN_BIN_DIR: ${{ runner.temp }}\joltrin-bin
     steps:
       - uses: actions/checkout@v4
+
+      - name: Choose an install folder
+        shell: pwsh
+        run: Add-Content $env:GITHUB_ENV "JOLTRIN_BIN_DIR=$env:RUNNER_TEMP\joltrin-bin"
 
       - name: Windows PowerShell 5.1, piped into iex
         shell: powershell
