@@ -7,6 +7,7 @@
   "scripts": {
     "build:site": "bash scripts/build-site.sh",
     "serve:site": "node scripts/serve-test-site.mjs",
+    "test:site-server": "node --test scripts/serve-test-site.test.mjs",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
