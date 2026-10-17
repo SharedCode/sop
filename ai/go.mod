@@ -26,15 +26,15 @@ require (
 	github.com/golang/snappy v1.0.0 // indirect
 	github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed // indirect
 	github.com/kelindar/iostream v1.4.0 // indirect
-	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
+	github.com/klauspost/cpuid/v2 v2.4.0 // indirect
 	github.com/klauspost/reedsolomon v1.14.2 // indirect
 	github.com/ncw/directio v1.0.5 // indirect
-	github.com/redis/go-redis/v9 v9.22.0 // indirect
+	github.com/redis/go-redis/v9 v9.23.0 // indirect
 	github.com/sharedcode/joltrin/adapters/cassandra v0.1.0 // indirect
 	github.com/sharedcode/joltrin/adapters/redis v0.1.0 // indirect
 	github.com/sharedcode/joltrin/incfs v0.1.0 // indirect
 	github.com/stretchr/objx v0.5.3 // indirect
-	go.uber.org/atomic v1.11.0 // indirect
+	go.uber.org/atomic v1.12.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f // indirect
 	golang.org/x/sys v0.48.0 // indirect
