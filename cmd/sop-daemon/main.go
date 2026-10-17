@@ -1,17 +1,19 @@
-// Command sop-daemon runs a loopback-only helper that executes shell
+// Command sop-daemon runs a loopback-only helper that executes configured
 // commands on behalf of the SOP web UI (tools/httpserver serves a page that
 // posts here after a human approves a proposed command).
 //
-// Security model, since this endpoint runs shell commands: the only
-// meaningful remote threat is a web page in the user's own browser posting
-// here cross-origin, because any local process running as this user could
-// already execute commands directly without the daemon's help. That threat
-// is closed by validating the Origin header against an allowlist and never
-// answering with a wildcard CORS header; a browser always attaches Origin
+// Executable names are explicitly configured and resolved at startup. Requests
+// can select those entries and supply arguments, but cannot introduce another
+// executable or change its path. An allowed interpreter can still execute code
+// supplied through its arguments, so operators must trust callers to use each
+// configured program's full capabilities. See docs/DAEMON.md.
+//
+// Cross-origin browser requests are gated by validating the Origin allowlist
+// and never answering with a wildcard CORS header; a browser attaches Origin
 // to a cross-origin POST, so a page on evil.example cannot reach this
 // endpoint even though it is reachable at 127.0.0.1. Requests with no
-// Origin at all (curl, tests, other local tooling) are allowed through on
-// the reasoning above, and can additionally be gated with -token.
+// Origin at all (curl, tests, other local tooling) still require a configured
+// executable and can additionally be gated with -token.
 package main
 
 import (
@@ -25,6 +27,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 	"unicode"
@@ -105,10 +108,15 @@ type config struct {
 	allowedOrigins map[string]bool
 	token          string
 	commandTimeout time.Duration
-	// allowedExecutables, when non-empty, limits which programs may run. A
-	// program is matched exactly as sent, so "kubectl" does not permit
-	// "/tmp/kubectl". Empty keeps the old behavior of running anything.
-	allowedExecutables map[string]bool
+	// allowedExecutables maps exact configured request names to executable paths
+	// and invocation names resolved at startup. An empty map permits no execution.
+	// Requests may select entries but never supply their paths or invocation names.
+	allowedExecutables map[string]configuredExecutable
+}
+
+type configuredExecutable struct {
+	path  string
+	argv0 string
 }
 
 func main() {
@@ -118,15 +126,20 @@ func main() {
 	token := flag.String("token", os.Getenv("SOP_DAEMON_TOKEN"),
 		"Optional shared secret; when set, callers must send it in the "+tokenHeader+" header. Defaults to $SOP_DAEMON_TOKEN.")
 	allow := flag.String("allow-executables", os.Getenv("SOP_DAEMON_ALLOW_EXECUTABLES"),
-		"Optional comma-separated list of programs the daemon may run, matched exactly (for example kubectl,terraform). Empty allows any program. Defaults to $SOP_DAEMON_ALLOW_EXECUTABLES.")
+		"Required comma-separated list of programs the daemon may run, matched exactly and resolved at startup (for example kubectl,terraform). Defaults to $SOP_DAEMON_ALLOW_EXECUTABLES.")
 	timeout := flag.Duration("command-timeout", 60*time.Second, "Maximum wall-clock time a single command may run before it is killed.")
 	flag.Parse()
+
+	executables, err := resolveExecutables(*allow)
+	if err != nil {
+		log.Fatalf("Invalid executable allowlist: %v", err)
+	}
 
 	cfg := &config{
 		allowedOrigins:     parseOrigins(*origins),
 		token:              *token,
 		commandTimeout:     *timeout,
-		allowedExecutables: parseOrigins(*allow),
+		allowedExecutables: executables,
 	}
 
 	mux := http.NewServeMux()
@@ -144,10 +157,7 @@ func main() {
 	}
 
 	log.Printf("Starting SOP Desktop Daemon on %s", addr)
-	log.Printf("This daemon executes shell commands. Allowed browser origins: %s", strings.Join(sortedKeys(cfg.allowedOrigins), ", "))
-	if len(cfg.allowedExecutables) == 0 {
-		log.Printf("No -allow-executables set: any program can be run. Set it to limit the daemon to the programs you use.")
-	}
+	log.Printf("Configured executables: %v. Allowed browser origins: %s", cfg.allowedExecutables, strings.Join(sortedKeys(cfg.allowedOrigins), ", "))
 	if cfg.token == "" {
 		log.Printf("No -token set: any local process can post commands here (it could also just run them directly). Set -token to require a shared secret.")
 	}
@@ -155,6 +165,37 @@ func main() {
 	if err := srv.ListenAndServe(); err != nil {
 		log.Fatalf("Server failed: %v", err)
 	}
+}
+
+// resolveExecutables accepts operator configuration, never request data. Resolve
+// PATH entries and symlinks now so later requests cannot select another binary
+// by changing PATH or the configured symlink. The operator must still protect
+// the resolved executable and its directories from replacement.
+func resolveExecutables(csv string) (map[string]configuredExecutable, error) {
+	out := make(map[string]configuredExecutable)
+	for _, name := range strings.Split(csv, ",") {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		path, err := exec.LookPath(name)
+		if err != nil {
+			return nil, fmt.Errorf("cannot resolve %q: %w", name, err)
+		}
+		path, err = filepath.Abs(path)
+		if err != nil {
+			return nil, fmt.Errorf("cannot resolve absolute path for %q: %w", name, err)
+		}
+		path, err = filepath.EvalSymlinks(path)
+		if err != nil {
+			return nil, fmt.Errorf("cannot resolve symlinks for %q: %w", name, err)
+		}
+		out[name] = configuredExecutable{path: path, argv0: name}
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("set -allow-executables or SOP_DAEMON_ALLOW_EXECUTABLES to the programs callers may run")
+	}
+	return out, nil
 }
 
 func parseOrigins(csv string) map[string]bool {
@@ -251,19 +292,24 @@ func executeHandler(cfg *config) http.HandlerFunc {
 			args = parts[1:]
 		}
 
-		if len(cfg.allowedExecutables) > 0 && !cfg.allowedExecutables[program] {
+		trustedProgram, allowed := cfg.allowedExecutables[program]
+		if !allowed || trustedProgram.path == "" || trustedProgram.argv0 == "" {
 			respondJSON(w, http.StatusForbidden, ExecuteResponse{Error: "Executable not in the allowlist: " + sanitizeLog(program)})
 			return
 		}
 
-		log.Printf("Executing: %s %v", sanitizeLog(program), sanitizeLogArgs(args))
+		log.Printf("Executing configured program: %s %v", sanitizeLog(trustedProgram.path), sanitizeLogArgs(args))
 
 		// Bound the run: a command that never exits would otherwise pin this
 		// handler (and its goroutine) forever.
 		ctx, cancel := context.WithTimeout(r.Context(), cfg.commandTimeout)
 		defer cancel()
 
-		cmd := exec.CommandContext(ctx, program, args...)
+		cmd := exec.CommandContext(ctx, trustedProgram.path, args...)
+		// Multicall executables such as BusyBox select an applet using argv[0].
+		// Preserve the configured invocation while Cmd.Path stays pinned to the
+		// resolved binary; neither value is taken from the request.
+		cmd.Args[0] = trustedProgram.argv0
 		cmd.Env = childEnv()
 		cmd.WaitDelay = killWait
 
