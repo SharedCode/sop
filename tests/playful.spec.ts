@@ -76,14 +76,17 @@ test.describe('Agent barrier missions', () => {
 });
 
 test.describe('Docs path chooser', () => {
-  test('four paths, and the in-page ones land on real sections', async ({ page }) => {
+  test('five paths, and the in-page ones land on real sections', async ({ page }) => {
     await page.goto('/docs/', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('a.path')).toHaveCount(4);
-    for (const [href, id] of [['#mcp', 'mcp'], ['#kubernetes', 'kubernetes']]) {
+    await expect(page.locator('a.path')).toHaveCount(5);
+    for (const [href, id] of [['#local-demo', 'local-demo'], ['#mcp', 'mcp'], ['#kubernetes', 'kubernetes']]) {
       await expect(page.locator(`a.path[href="${href}"]`)).toBeVisible();
       await expect(page.locator(`#${id}`)).toHaveCount(1);
     }
     await expect(page.locator('a.path[href="../agents/"]')).toBeVisible();
+    await page.getByRole('link', { name: /I build with Go/ }).click();
+    await expect(page).toHaveURL(/#local-demo$/);
+    await expect(page.locator('#demo-command')).toContainText('examples/verify_barrier@latest');
     await page.locator('a.path[href="#kubernetes"]').click();
     await expect(page).toHaveURL(/#kubernetes$/);
   });
