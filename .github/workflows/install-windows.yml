@@ -1,0 +1,61 @@
+name: Windows install
+
+# Runs scripts/install.ps1 on a real Windows runner, the way a user would: piped
+# into iex from Windows PowerShell 5.1, piped into iex from PowerShell 7, and
+# through the cmd.exe wrapper. It installs the latest release, so it also fails
+# if that release has no Windows binary or checksum.
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/install.ps1'
+      - '.github/workflows/install-windows.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    name: install.ps1 on Windows
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Choose an install folder
+        shell: pwsh
+        run: |
+          Add-Content $env:GITHUB_ENV "JOLTRIN_BIN_DIR=$env:RUNNER_TEMP\joltrin-bin"
+          # The runner has no agent CLI, and setup exits 1 when it finds none.
+          Add-Content $env:GITHUB_ENV "JOLTRIN_NO_SETUP=1"
+
+      - name: Windows PowerShell 5.1, piped into iex
+        shell: powershell
+        run: |
+          Get-Content -Raw scripts\install.ps1 | iex
+          if (-not (Test-Path "$env:JOLTRIN_BIN_DIR\sop-mcp-server.exe")) { throw 'binary was not installed' }
+          Remove-Item -Recurse -Force $env:JOLTRIN_BIN_DIR
+
+      - name: PowerShell 7, piped into iex
+        shell: pwsh
+        run: |
+          Get-Content -Raw scripts\install.ps1 | iex
+          if (-not (Test-Path "$env:JOLTRIN_BIN_DIR\sop-mcp-server.exe")) { throw 'binary was not installed' }
+          Remove-Item -Recurse -Force $env:JOLTRIN_BIN_DIR
+
+      - name: cmd.exe wrapper
+        shell: cmd
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Content -Raw scripts\install.ps1 | iex"
+          if errorlevel 1 exit /b 1
+          if not exist "%JOLTRIN_BIN_DIR%\sop-mcp-server.exe" exit /b 1
+
+      - name: A failed download installs nothing
+        shell: pwsh
+        run: |
+          $env:JOLTRIN_BIN_DIR = "$env:RUNNER_TEMP\joltrin-bad"
+          $env:JOLTRIN_VERSION = 'v0.0.0-does-not-exist'
+          try { Get-Content -Raw scripts\install.ps1 | iex; throw 'install should have failed' }
+          catch { if ($_.Exception.Message -notmatch 'download failed') { throw } }
+          if (Test-Path "$env:JOLTRIN_BIN_DIR\sop-mcp-server.exe") { throw 'a failed install left a binary behind' }

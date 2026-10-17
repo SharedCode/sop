@@ -125,8 +125,20 @@ drop_prod_db      allowed</pre>
       <button class="copy-command" type="button" data-command="mcp-command" data-label="MCP install command" hidden>Copy MCP install command</button>
       <p class="copy-status" role="status" aria-live="polite" aria-atomic="true"></p>
     </div>
+    <p>On Windows, in PowerShell (<a href="https://github.com/SharedCode/joltrin/blob/master/scripts/install.ps1" target="_blank" rel="noopener noreferrer">review the script</a>):</p>
+    <div class="command">
+<pre id="mcp-command-powershell">irm https://raw.githubusercontent.com/SharedCode/joltrin/master/scripts/install.ps1 | iex</pre>
+      <button class="copy-command" type="button" data-command="mcp-command-powershell" data-label="PowerShell install command" hidden>Copy PowerShell install command</button>
+      <p class="copy-status" role="status" aria-live="polite" aria-atomic="true"></p>
+    </div>
+    <p>Or in Command Prompt (cmd.exe):</p>
+    <div class="command">
+<pre id="mcp-command-cmd">powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/SharedCode/joltrin/master/scripts/install.ps1 | iex"</pre>
+      <button class="copy-command" type="button" data-command="mcp-command-cmd" data-label="Command Prompt install command" hidden>Copy Command Prompt install command</button>
+      <p class="copy-status" role="status" aria-live="polite" aria-atomic="true"></p>
+    </div>
     <p>Restart your agent after installation. Ask it: “Use the joltrin tools to run <code>drop_prod_db</code> on workflow <code>db-maintenance</code> with trace id <code>first-run</code>.” Expect a block naming <code>backup_validated</code>, then ask it to run the missing steps and retry in the same trace. The sample tools do not change a real database.</p>
-    <p>If the tools are missing, check the installer's registration output and your agent's MCP configuration. For Windows, manual installation, or an agent that was not registered automatically, follow the setup guide below.</p>
+    <p>If the tools are missing, check the installer's registration output and your agent's MCP configuration. For manual installation or an agent that was not registered automatically, follow the setup guide below.</p>
     </section>
     <p>Building with Go, Windows, your own runbooks, and memory are covered in the <a href="https://github.com/SharedCode/joltrin#connect-it-to-an-mcp-agent" target="_blank" rel="noopener noreferrer">README</a> and <a href="https://github.com/SharedCode/joltrin/blob/master/docs/AGENT_PROTOCOLS.md" target="_blank" rel="noopener noreferrer">Agent protocols</a>.</p>
 

@@ -238,7 +238,13 @@ func TestInstallScriptMatchesTheReleaseAssets(t *testing.T) {
 	if !strings.Contains(workflow, "attest-build-provenance") || !strings.Contains(workflow, "dist/sop-mcp-server-*") {
 		t.Error("release-mcp-binaries.yml no longer attests the binaries install.sh verifies")
 	}
-	for _, platform := range []string{"darwin/amd64", "darwin/arm64", "linux/amd64", "linux/arm64"} {
+	ps := readRepoFile(t, "scripts/install.ps1")
+	for _, want := range []string{`sop-mcp-server-windows-$arch.exe`, `sop-mcp-server-SHA256SUMS`, "gh attestation verify"} {
+		if !strings.Contains(ps, want) {
+			t.Errorf("install.ps1 no longer contains %q", want)
+		}
+	}
+	for _, platform := range []string{"darwin/amd64", "darwin/arm64", "linux/amd64", "linux/arm64", "windows/amd64", "windows/arm64"} {
 		if !strings.Contains(workflow, platform) {
 			t.Errorf("release-mcp-binaries.yml no longer builds %q, which install.sh downloads", platform)
 		}
