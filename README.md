@@ -86,6 +86,18 @@ Any agent that supports MCP can use the barrier. One command downloads a binary 
 curl -fsSL https://raw.githubusercontent.com/SharedCode/joltrin/master/scripts/install.sh | sh
 ```
 
+On Windows, in PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/SharedCode/joltrin/master/scripts/install.ps1 | iex
+```
+
+Or in Command Prompt (cmd.exe):
+
+```bat
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/SharedCode/joltrin/master/scripts/install.ps1 | iex"
+```
+
 The script, the binary and the checksums all come from the same GitHub release. The checksum catches a damaged or swapped download, not a compromised release, so if that matters to you, set `JOLTRIN_VERIFY=1`. It also verifies the binary's signed build provenance with the GitHub CLI (`gh`, signed in), which does not depend on the checksum file, needs a release from v5.11.0 on, and adds a few seconds. You can also read [`scripts/install.sh`](scripts/install.sh) first, install a specific release with `JOLTRIN_VERSION=v5.11.0`, or skip registering with `JOLTRIN_NO_SETUP=1`. To avoid the script, use the steps below or build from source.
 
 <details>

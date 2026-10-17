@@ -107,6 +107,8 @@ test.describe('Homepage', () => {
     const section = page.locator('#test-your-agent');
     await expect(section).toContainText('No Go needed');
     await expect(section).toContainText('curl -fsSL https://raw.githubusercontent.com/SharedCode/joltrin/master/scripts/install.sh | sh');
+    await expect(section).toContainText('irm https://raw.githubusercontent.com/SharedCode/joltrin/master/scripts/install.ps1 | iex');
+    await expect(section).toContainText('powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/SharedCode/joltrin/master/scripts/install.ps1 | iex"');
   });
 
   test('shows how to drive the barrier from LangGraph and says the offline policy is not a model', async ({ page }) => {
