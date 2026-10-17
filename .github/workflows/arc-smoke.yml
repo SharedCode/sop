@@ -7,5 +7,5 @@ jobs:
   smoke:
     runs-on: [joltrin-bindings-runners]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: go version && zig version
