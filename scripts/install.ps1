@@ -71,7 +71,7 @@ function Install-Joltrin {
         throw 'install: JOLTRIN_VERIFY=1 needs the GitHub CLI (gh), signed in with gh auth login'
       }
       Write-Host 'Verifying build provenance'
-      & gh attestation verify (Join-Path $tmp $name) --repo SharedCode/joltrin *> $null
+      & gh attestation verify "$(Join-Path $tmp $name)" --repo SharedCode/joltrin *> $null
       if ($LASTEXITCODE -ne 0) {
         throw 'install: build provenance could not be verified, nothing was installed. It needs gh signed in and a release from v5.11.0 on'
       }
@@ -85,7 +85,7 @@ function Install-Joltrin {
     if ($env:JOLTRIN_NO_SETUP -eq '1') {
       Write-Host "Register it with: & '$exe' setup --apply"
     } else {
-      & $exe setup --apply
+      & "$exe" setup --apply
       if ($LASTEXITCODE -ne 0) { throw "install: setup exited with code $LASTEXITCODE" }
     }
   } finally {

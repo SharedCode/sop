@@ -36,7 +36,7 @@ test.describe('First-run onboarding', () => {
     });
     await page.goto('/docs/#mcp');
     await page.getByRole('button', { name: 'Copy MCP install command' }).click();
-    await expect(page.locator('#mcp-install-guide').getByRole('status')).toHaveText('Copy unavailable. The command is selected; copy it manually.');
+    await expect(page.locator('#mcp-install-guide .command', { has: page.locator('#mcp-command') }).getByRole('status')).toHaveText('Copy unavailable. The command is selected; copy it manually.');
     expect(await page.evaluate(() => window.getSelection()?.toString())).toBe(
       'curl -fsSL https://raw.githubusercontent.com/SharedCode/joltrin/master/scripts/install.sh | sh',
     );

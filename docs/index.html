@@ -128,13 +128,13 @@ drop_prod_db      allowed</pre>
     <p>On Windows, in PowerShell (<a href="https://github.com/SharedCode/joltrin/blob/master/scripts/install.ps1" target="_blank" rel="noopener noreferrer">review the script</a>):</p>
     <div class="command">
 <pre id="mcp-command-powershell">irm https://raw.githubusercontent.com/SharedCode/joltrin/master/scripts/install.ps1 | iex</pre>
-      <button class="copy-command" type="button" data-command="mcp-command-powershell" data-label="MCP install command for PowerShell" hidden>Copy MCP install command for PowerShell</button>
+      <button class="copy-command" type="button" data-command="mcp-command-powershell" data-label="PowerShell install command" hidden>Copy PowerShell install command</button>
       <p class="copy-status" role="status" aria-live="polite" aria-atomic="true"></p>
     </div>
     <p>Or in Command Prompt (cmd.exe):</p>
     <div class="command">
 <pre id="mcp-command-cmd">powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/SharedCode/joltrin/master/scripts/install.ps1 | iex"</pre>
-      <button class="copy-command" type="button" data-command="mcp-command-cmd" data-label="MCP install command for Command Prompt" hidden>Copy MCP install command for Command Prompt</button>
+      <button class="copy-command" type="button" data-command="mcp-command-cmd" data-label="Command Prompt install command" hidden>Copy Command Prompt install command</button>
       <p class="copy-status" role="status" aria-live="polite" aria-atomic="true"></p>
     </div>
     <p>Restart your agent after installation. Ask it: “Use the joltrin tools to run <code>drop_prod_db</code> on workflow <code>db-maintenance</code> with trace id <code>first-run</code>.” Expect a block naming <code>backup_validated</code>, then ask it to run the missing steps and retry in the same trace. The sample tools do not change a real database.</p>
