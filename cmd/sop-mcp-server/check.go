@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -28,10 +29,11 @@ type checkResult struct {
 }
 
 type checkWorkflow struct {
-	Name         string       `json:"name"`
-	Steps        []checkStep  `json:"steps"`
-	Safety       []checkRule  `json:"safety"`
-	Reachability []checkReach `json:"reachability"`
+	Name         string            `json:"name"`
+	Diagnostics  *checkDiagnostics `json:"diagnostics,omitempty"`
+	Steps        []checkStep       `json:"steps"`
+	Safety       []checkRule       `json:"safety"`
+	Reachability []checkReach      `json:"reachability"`
 }
 
 type checkStep struct {
@@ -51,7 +53,72 @@ type checkReach struct {
 	Target string `json:"target"`
 }
 
-const checkUsage = "usage: sop-mcp-server check [--json] <runbooks.json>\n"
+type checkDiagnostics struct {
+	RunnableOrder []string  `json:"runnable_order"`
+	Blocked       []tryStep `json:"blocked"`
+	Error         string    `json:"error,omitempty"`
+}
+
+const checkUsage = "usage: sop-mcp-server check [--json] [--diagnose] <runbooks.json>\n"
+
+// diagnoseWorkflow commits each step at most once in a fresh, in-memory trace.
+// States only accumulate, so a stalled pass identifies steps that cannot run
+// from an empty trace under the current preconditions and safety rules. This
+// checks declared transitions; it never executes tools or proves external facts.
+func diagnoseWorkflow(wf *verify.Workflow, maxChecks int) *checkDiagnostics {
+	d := &checkDiagnostics{RunnableOrder: []string{}, Blocked: []tryStep{}}
+	pending := orderedSteps(wf)
+	// Index producers once: stalled steps may be revisited on many passes.
+	establishers := map[verify.State][]string{}
+	for _, step := range pending {
+		seen := map[verify.State]bool{}
+		for _, state := range step.Establishes {
+			if !seen[state] {
+				establishers[state] = append(establishers[state], string(step.ID))
+				seen[state] = true
+			}
+		}
+	}
+	for _, ids := range establishers {
+		sort.Strings(ids)
+	}
+	trace := verify.NewTrace()
+	checks := 0
+	for len(pending) > 0 {
+		var next []verify.Step
+		blocked := []tryStep{}
+		for _, step := range pending {
+			if checks >= maxChecks {
+				d.Error = fmt.Sprintf("diagnostic limit reached after %d checks; runnable order is partial", checks)
+				return d
+			}
+			checks++
+			err := wf.CheckAndCommit(trace, step.ID)
+			if err == nil {
+				d.RunnableOrder = append(d.RunnableOrder, string(step.ID))
+				continue
+			}
+			var v *verify.Violation
+			if !errors.As(err, &v) {
+				d.Error = err.Error()
+				return d
+			}
+			st := tryStep{Step: string(step.ID), Decision: "blocked", Reason: v.Message, Next: verify.NextStopAndAsk}
+			st.RunFirst = establishers[v.MissingState]
+			if len(st.RunFirst) > 0 {
+				st.Next = verify.NextRunEstablishingSteps
+			}
+			blocked = append(blocked, st)
+			next = append(next, step)
+		}
+		if len(next) == len(pending) {
+			d.Blocked = blocked
+			break
+		}
+		pending = next
+	}
+	return d
+}
 
 // runCheck implements "sop-mcp-server check <file>": it loads the file and
 // prints what the barrier will enforce. With --json it prints the same as one
@@ -63,6 +130,7 @@ func runCheck(args []string, out, errw io.Writer) int {
 		return 0
 	}
 	args, asJSON := popFlag(args, "--json")
+	args, diagnose := popFlag(args, "--diagnose")
 	if len(args) != 1 {
 		fmt.Fprint(errw, checkUsage)
 		return 2
@@ -77,11 +145,24 @@ func runCheck(args []string, out, errw io.Writer) int {
 		return 1
 	}
 
+	diagnostics := map[string]*checkDiagnostics{}
+	code := 0
+	if diagnose {
+		for _, name := range names {
+			wf, _ := store.Workflow(name)
+			d := diagnoseWorkflow(wf, 100000)
+			diagnostics[name] = d
+			if len(d.Blocked) > 0 || d.Error != "" {
+				code = 1
+			}
+		}
+	}
+
 	if asJSON {
 		res := checkResult{Valid: true, File: args[0]}
 		for _, name := range names {
 			wf, _ := store.Workflow(name)
-			cw := checkWorkflow{Name: name, Steps: []checkStep{}, Safety: []checkRule{}, Reachability: []checkReach{}}
+			cw := checkWorkflow{Name: name, Diagnostics: diagnostics[name], Steps: []checkStep{}, Safety: []checkRule{}, Reachability: []checkReach{}}
 			for _, s := range orderedSteps(wf) {
 				cw.Steps = append(cw.Steps, checkStep{ID: string(s.ID), Requires: sortedStates(s.Requires), Establishes: sortedStates(s.Establishes)})
 			}
@@ -93,7 +174,7 @@ func runCheck(args []string, out, errw io.Writer) int {
 			}
 			res.Workflows = append(res.Workflows, cw)
 		}
-		return emitJSON(out, errw, res, 0)
+		return emitJSON(out, errw, res, code)
 	}
 
 	noun := "workflows"
@@ -113,8 +194,21 @@ func runCheck(args []string, out, errw io.Writer) int {
 		for _, r := range wf.Reachability {
 			fmt.Fprintf(out, "  reachability %s: %q must stay reachable from every state\n", r.Name, r.Target)
 		}
+
+		if d := diagnostics[name]; d != nil {
+			fmt.Fprintf(out, "  runnable order: %s\n", strings.Join(d.RunnableOrder, " -> "))
+			for _, st := range d.Blocked {
+				fmt.Fprintf(out, "  BLOCKED %s: %s\n", st.Step, st.Reason)
+				if len(st.RunFirst) > 0 {
+					fmt.Fprintf(out, "    run first: %s (also blocked)\n", strings.Join(st.RunFirst, ", "))
+				}
+			}
+			if d.Error != "" {
+				fmt.Fprintf(out, "  diagnostics incomplete: %s\n", d.Error)
+			}
+		}
 	}
-	return 0
+	return code
 }
 
 // sortedStates returns states as sorted strings, never nil, so the JSON shows
