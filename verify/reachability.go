@@ -7,6 +7,8 @@ import "fmt"
 // other state that appears anywhere in the graph (as a precondition or
 // postcondition)? This is a static property of the Workflow's structure, it
 // does not depend on any particular Trace.
+// The target must be established by a step; mentioning it only as a
+// precondition does not provide a way to reach it.
 //
 // Implementation: build a directed graph where an edge State A -> State B
 // exists if some step requiring A (among possibly other states) establishes
@@ -36,7 +38,7 @@ func (w *Workflow) VerifyReachability() error {
 	allStates := w.allStates()
 
 	for _, rule := range w.Reachability {
-		if _, ok := allStates[rule.Target]; !ok {
+		if len(w.StepsThatEstablish(rule.Target)) == 0 {
 			return fmt.Errorf("verify: reachability rule %q targets state %q, which no step establishes", rule.Name, rule.Target)
 		}
 
