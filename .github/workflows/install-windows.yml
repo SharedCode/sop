@@ -25,7 +25,10 @@ jobs:
 
       - name: Choose an install folder
         shell: pwsh
-        run: Add-Content $env:GITHUB_ENV "JOLTRIN_BIN_DIR=$env:RUNNER_TEMP\joltrin-bin"
+        run: |
+          Add-Content $env:GITHUB_ENV "JOLTRIN_BIN_DIR=$env:RUNNER_TEMP\joltrin-bin"
+          # The runner has no agent CLI, and setup exits 1 when it finds none.
+          Add-Content $env:GITHUB_ENV "JOLTRIN_NO_SETUP=1"
 
       - name: Windows PowerShell 5.1, piped into iex
         shell: powershell
