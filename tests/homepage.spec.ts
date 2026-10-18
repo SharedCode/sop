@@ -29,6 +29,9 @@ test.describe('Homepage', () => {
     await page.route(/^https:\/\/unpkg\.com\//, (route) => route.abort());
     await page.goto('/', { waitUntil: 'load' });
     const h1 = page.getByRole('heading', { level: 1 });
+    await expect(h1).toBeAttached();
+    // The scroll story sits above the hero, so bring the headline into view first.
+    await h1.scrollIntoViewIfNeeded();
     await expect(h1).toBeVisible();
     await expect
       .poll(

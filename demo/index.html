@@ -9,7 +9,7 @@
   <link rel="canonical" href="https://joltrinhq.com/" />
   <meta name="color-scheme" content="dark light" />
   <meta name="theme-color" content="#07090E" media="(prefers-color-scheme: dark)" />
-  <meta name="theme-color" content="#F5F5F7" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#F4F5F8" media="(prefers-color-scheme: light)" />
 
   <!-- Open Graph / Facebook / LinkedIn -->
   <meta property="og:type" content="website" />
@@ -247,13 +247,13 @@
     @media (prefers-color-scheme: light) {
       :root {
         color-scheme: light;
-        --c-fg: 29 29 31;
-        --c-slate-200: 29 29 31;
+        --c-fg: 24 28 36;
+        --c-slate-200: 24 28 36;
         --c-slate-300: 51 56 66;
         --c-slate-400: 83 91 105;
         --c-slate-500: 99 108 122;
         --c-slate-600: 115 122 134;
-        --c-dark-950: 245 245 247;
+        --c-dark-950: 244 245 248;
         --c-dark-900: 255 255 255;
         --c-dark-850: 250 250 252;
         --c-dark-800: 226 228 233;
@@ -276,7 +276,7 @@
       .bg-amber-950\/40 { background-color: #fffbeb; }
       .bg-brand-950\/40 { background-color: #ecfdf5; }
       .border-rose-800\/60 { border-color: rgba(190, 18, 60, 0.35); }
-      .bg-black\/80 { background-color: rgba(245, 245, 247, 0.85); }
+      .bg-black\/80 { background-color: rgba(244, 245, 248, 0.85); }
       .glow-emerald { box-shadow: 0 10px 40px -12px rgba(16, 185, 129, 0.3); }
       .glow-cyan { box-shadow: 0 10px 35px -10px rgba(6, 182, 212, 0.28); }
       header.sticky, section.rounded-2xl { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 30px -14px rgba(0, 0, 0, 0.12); }
@@ -344,6 +344,56 @@
       .js .reveal { opacity: 1; transform: none; transition: none; }
       .scroll-progress { display: none; }
     }
+  </style>
+  <style>
+    /* Scroll story. Default markup is the finished state, so it reads fine without scripts or with reduced motion. */
+    .story { position: relative; z-index: 1; }
+    .story-words, .story-end h2 { font-weight: 700; letter-spacing: -0.035em; line-height: 1.06; font-size: clamp(2rem, 6.2vw, 4.75rem); }
+    .story-intro { min-height: 100svh; display: flex; align-items: center; justify-content: center; padding: 6rem 1.5rem; }
+    .story-intro p { max-width: 58rem; margin: 0; }
+    .story-eyebrow { font: 500 0.75rem/1 'JetBrains Mono', monospace; letter-spacing: 0.14em; text-transform: uppercase; color: rgb(var(--c-slate-400)); margin: 0 0 1.5rem; }
+    .story-words .w { color: rgb(var(--c-fg)); transition: color 0.25s linear; }
+    .story-pin { position: relative; }
+    .story-stage { min-height: 100svh; display: grid; grid-template-columns: minmax(0, 1fr); gap: 2.5rem; align-items: center; align-content: center; max-width: 72rem; margin: 0 auto; padding: 5rem 1.5rem; }
+    @media (min-width: 900px) { .story-stage { grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 4rem; } }
+    .story-verdict { font-weight: 800; letter-spacing: -0.04em; line-height: 1; font-size: clamp(3rem, 9vw, 7rem); margin: 0 0 1.25rem; min-height: 1.05em; position: relative; }
+    .story-verdict span { display: block; }
+    .story-verdict .v-block { color: #f43f5e; }
+    .story-verdict .v-allow { color: #10b981; }
+    .story-note { color: rgb(var(--c-slate-300)); font-size: clamp(1rem, 1.6vw, 1.25rem); max-width: 30rem; margin: 0; min-height: 4.8em; }
+    .story-card { border: 1px solid rgb(var(--c-dark-700)); background: rgb(var(--c-dark-900)); border-radius: 1.25rem; padding: 1.25rem 1.25rem 1rem; font-family: 'JetBrains Mono', monospace; font-size: clamp(0.78rem, 1.5vw, 0.95rem); box-shadow: 0 30px 80px -30px rgba(16, 185, 129, 0.25); }
+    .story-card .hd { color: rgb(var(--c-slate-500)); font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; margin: 0 0 0.9rem; }
+    .story-row { display: flex; justify-content: space-between; gap: 1rem; padding: 0.7rem 0; border-top: 1px solid rgb(var(--c-dark-800)); color: rgb(var(--c-slate-300)); }
+    .story-row:first-of-type { border-top: 0; }
+    .story-row b { font-weight: 600; white-space: nowrap; }
+    .story-row .no { color: #f43f5e; }
+    .story-row .ok { color: #10b981; }
+    .story-row .why { color: rgb(var(--c-slate-500)); text-align: right; }
+    .story-end { min-height: 100svh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 6rem 1.5rem; gap: 2.25rem; }
+    .story-end h2 { margin: 0; max-width: 16ch; }
+    .story-end h2 em { font-style: normal; background: linear-gradient(90deg, #10b981, #06b6d4, #8b5cf6); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .story-cta { display: flex; flex-wrap: wrap; gap: 0.75rem; justify-content: center; }
+    .story-cta a { padding: 0.85rem 1.4rem; border-radius: 999px; font-weight: 600; font-size: 0.95rem; transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
+    .story-cta a:hover { transform: translate3d(0, -2px, 0); }
+    .story-cta .primary { background: #10b981; color: #000; }
+    .story-cta .ghost { border: 1px solid rgb(var(--c-dark-700)); color: rgb(var(--c-fg)); background: rgb(var(--c-dark-900) / 0.6); }
+    /* Scripted mode: the pin track is tall and the stage sticks while scroll drives the steps. */
+    .js-story .story-intro { display: block; height: 230vh; padding: 0; }
+    .js-story .story-intro > div { position: sticky; top: 0; height: 100svh; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; max-width: 58rem; margin: 0 auto; padding: 5rem 1.5rem 2rem; }
+    .js-story .story-pin { height: 420vh; }
+    .js-story .story-stage { position: sticky; top: 0; height: 100svh; min-height: 0; padding-top: 5.5rem; padding-bottom: 2rem; }
+    .js-story .story-words .w { color: rgb(var(--c-fg) / 0.16); }
+    .js-story .story-words .w.lit { color: rgb(var(--c-fg)); }
+    .js-story .story-verdict span { position: absolute; left: 0; top: 0; opacity: 0; transform: translate3d(0, 24px, 0); transition: opacity 0.5s, transform 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
+    .js-story .story-verdict span.show { opacity: 1; transform: none; }
+    .js-story .story-note span { display: none; }
+    .js-story .story-note span.show { display: inline; }
+    .js-story .story-row { opacity: 0.14; transform: translate3d(0, 10px, 0); transition: opacity 0.45s, transform 0.55s cubic-bezier(0.16, 1, 0.3, 1); }
+    .js-story .story-row.on { opacity: 1; transform: none; }
+    .story-note span { display: inline; }
+    .story-verdict span.v-final { }
+    @media (prefers-color-scheme: light) { .story-row .no { color: #be123c; } .story-row .ok { color: #047857; } .story-cta .primary { color: #fff; background: #047857; } .story-card { box-shadow: 0 30px 80px -34px rgba(0, 0, 0, 0.25); } }
+    @media (prefers-reduced-motion: reduce) { .story-row, .story-verdict span, .story-words .w { transition: none !important; } }
   </style>
   <style>
     /* Footer links are standalone targets, keep them at least 24px tall. */
@@ -501,6 +551,50 @@
   </div>
 
   <!-- Main Container -->
+  <!-- Scroll story: the barrier decision sequence, played by scrolling -->
+  <div class="story" id="story">
+    <section class="story-intro" aria-labelledby="story-line">
+      <div>
+        <p class="story-eyebrow">Independent verification</p>
+        <p class="story-words" id="story-line"><span class="w">An</span> <span class="w">agent</span> <span class="w">says</span> <span class="w">it</span> <span class="w">backed</span> <span class="w">up</span> <span class="w">the</span> <span class="w">database.</span> <span class="w">Joltrin</span> <span class="w">checks</span> <span class="w">the</span> <span class="w">record,</span> <span class="w">not</span> <span class="w">the</span> <span class="w">claim.</span></p>
+      </div>
+    </section>
+
+    <section class="story-pin" aria-label="How the barrier decides">
+      <div class="story-stage">
+        <div>
+          <p class="story-verdict" aria-live="off">
+            <span class="v-block" data-for="0 1">Blocked.</span>
+            <span class="v-allow" data-for="2 3 4">Allowed.</span>
+          </p>
+          <p class="story-note">
+            <span data-for="0">The agent asks to drop the production database. The recorded trace has no validated backup, so the barrier refuses.</span>
+            <span data-for="1">It tries to validate a backup that was never taken. Refused again, with the missing state named.</span>
+            <span data-for="2">It takes the backup. That step has everything it needs, so it is recorded.</span>
+            <span data-for="3">Now the validation passes, because the backup it depends on exists in the trace.</span>
+            <span data-for="4">The drop is committed. The order was enforced by the barrier, whatever the agent said it had already done.</span>
+          </p>
+        </div>
+        <div class="story-card" role="img" aria-label="Runbook decisions: drop_prod_db blocked, validate_backup blocked, take_backup allowed, validate_backup allowed, drop_prod_db allowed">
+          <p class="hd">// db-maintenance runbook</p>
+          <div class="story-row"><b>drop_prod_db</b><span><b class="no">BLOCKED</b> <span class="why">backup_validated missing</span></span></div>
+          <div class="story-row"><b>validate_backup</b><span><b class="no">BLOCKED</b> <span class="why">backup_taken missing</span></span></div>
+          <div class="story-row"><b>take_backup</b><span><b class="ok">ALLOWED</b></span></div>
+          <div class="story-row"><b>validate_backup</b><span><b class="ok">ALLOWED</b></span></div>
+          <div class="story-row"><b>drop_prod_db</b><span><b class="ok">ALLOWED</b></span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="story-end" aria-labelledby="story-end-h">
+      <h2 id="story-end-h">Check before it <em>commits.</em></h2>
+      <div class="story-cta">
+        <a class="primary" href="./agents/">Open the barrier demo</a>
+        <a class="ghost" href="https://github.com/SharedCode/joltrin#try-it-in-five-minutes" target="_blank" rel="noopener noreferrer">Read the quickstart</a>
+      </div>
+    </section>
+  </div>
+
   <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
     <!-- Hero -->
@@ -2736,6 +2830,42 @@ Error from server: admission webhook "gate.joltrin.dev" denied the request: step
       window.addEventListener('scroll', function () {
         if (!ticking) { ticking = true; requestAnimationFrame(frame); }
       }, { passive: true });
+      frame();
+    })();
+  </script>
+  <script>
+    // Scroll story: words light up, then the pinned stage steps through the five decisions as you scroll.
+    (function () {
+      var story = document.getElementById('story');
+      if (!story || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      document.documentElement.classList.add('js-story');
+      var words = story.querySelectorAll('.story-words .w');
+      var intro = story.querySelector('.story-intro');
+      var pin = story.querySelector('.story-pin');
+      var rows = story.querySelectorAll('.story-row');
+      var tagged = story.querySelectorAll('[data-for]');
+      var step = -1, ticking = false;
+      function frame() {
+        ticking = false;
+        var vh = window.innerHeight;
+        // Words: lit across the pinned intro track.
+        var r = intro.getBoundingClientRect();
+        var p = Math.min(1, Math.max(0, (-r.top - vh * 0.1) / (r.height - vh * 1.4)));
+        var lit = Math.round(p * words.length);
+        words.forEach(function (w, i) { w.classList.toggle('lit', i < lit); });
+        // Stage: five steps across the pinned track.
+        var pr = pin.getBoundingClientRect();
+        var t = Math.min(0.9999, Math.max(0, -pr.top / (pr.height - vh)));
+        var n = pr.top > vh * 0.4 ? -1 : Math.floor(t * 5);
+        if (n === step) return;
+        step = n;
+        rows.forEach(function (row, i) { row.classList.toggle('on', i <= n); });
+        tagged.forEach(function (el) {
+          el.classList.toggle('show', el.dataset.for.split(' ').indexOf(String(Math.max(n, 0))) !== -1);
+        });
+      }
+      window.addEventListener('scroll', function () { if (!ticking) { ticking = true; requestAnimationFrame(frame); } }, { passive: true });
+      window.addEventListener('resize', frame);
       frame();
     })();
   </script>
