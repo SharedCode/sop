@@ -29,6 +29,9 @@ test.describe('Homepage', () => {
     await page.route(/^https:\/\/unpkg\.com\//, (route) => route.abort());
     await page.goto('/', { waitUntil: 'load' });
     const h1 = page.getByRole('heading', { level: 1 });
+    await expect(h1).toBeAttached();
+    // The scroll story sits above the hero, so bring the headline into view first.
+    await h1.scrollIntoViewIfNeeded();
     await expect(h1).toBeVisible();
     await expect
       .poll(
@@ -252,5 +255,48 @@ test.describe('Homepage', () => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('#form-status-alert')).toHaveAttribute('role', 'status');
     await expect(page.locator('#form-status-alert')).toHaveAttribute('aria-live', 'polite');
+  });
+
+  test.describe('scroll story', () => {
+    test('scrolling lights up the opening line and steps through the five decisions', async ({ page }) => {
+      await page.goto('/', { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('html')).toHaveClass(/js-story/);
+      await expect(page.locator('.story-words .w.lit')).toHaveCount(0);
+
+      const total = await page.locator('.story-words .w').count();
+      const introHeight = await page.locator('.story-intro').evaluate((el) => (el as HTMLElement).offsetHeight);
+      await page.evaluate((y) => window.scrollTo(0, y), introHeight * 0.9);
+      await expect.poll(() => page.locator('.story-words .w.lit').count()).toBe(total);
+
+      const pin = page.locator('.story-pin');
+      const [top, height, vh] = await pin.evaluate((el) => [
+        el.getBoundingClientRect().top + window.scrollY,
+        (el as HTMLElement).offsetHeight,
+        window.innerHeight,
+      ]);
+      const track = height - vh;
+      const stepAt = (n: number) => top + track * ((n + 0.5) / 5);
+
+      await page.evaluate((y) => window.scrollTo(0, y), stepAt(0));
+      await expect(page.locator('.story-row.on')).toHaveCount(1);
+      await expect(page.locator('.story-verdict .v-block')).toHaveClass(/show/);
+
+      await page.evaluate((y) => window.scrollTo(0, y), stepAt(4));
+      await expect(page.locator('.story-row.on')).toHaveCount(5);
+      await expect(page.locator('.story-verdict .v-allow')).toHaveClass(/show/);
+      await expect(page.locator('.story-verdict .v-block')).not.toHaveClass(/show/);
+    });
+
+    test('reduced motion renders the finished story with no scripted pinning', async ({ page }) => {
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      await page.goto('/', { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('html')).not.toHaveClass(/js-story/);
+      await expect(page.locator('.story-row')).toHaveCount(5);
+      for (const row of await page.locator('.story-row').all()) {
+        await expect(row).toHaveCSS('opacity', '1');
+      }
+      const position = await page.locator('.story-stage').evaluate((el) => getComputedStyle(el).position);
+      expect(position).not.toBe('sticky');
+    });
   });
 });
