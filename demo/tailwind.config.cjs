@@ -3,10 +3,11 @@ module.exports = {
   darkMode: 'class',
   theme: {
     extend: {
+      // Existing white foreground utilities follow the theme; fixed white controls use text-[#fff].
+      textColor: { white: 'rgb(var(--c-fg) / <alpha-value>)' },
       colors: {
         // Theme colors are channel triples set in index.html, so the page follows the system light or dark setting.
         // Dark slate-500 is 4.0:1 on the dark panels, under the 4.5:1 small text needs, so it is lifted there.
-        fg: 'rgb(var(--c-fg) / <alpha-value>)',
         slate: {
           200: 'rgb(var(--c-slate-200) / <alpha-value>)',
           300: 'rgb(var(--c-slate-300) / <alpha-value>)',
