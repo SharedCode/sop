@@ -7,6 +7,9 @@
   <meta name="description" content="Check an AI agent's proposed action against recorded workflow state and explicit prerequisites before it commits, and get an actionable decision when a step is missing. A Go verification engine with MCP and A2A servers. Open source." />
   <meta name="keywords" content="AI agent verification barrier, independent verifier, deterministic preconditions, AI agent safety, MCP, A2A, agent policy enforcement, Go, WebAssembly" />
   <link rel="canonical" href="https://joltrinhq.com/" />
+  <meta name="color-scheme" content="dark light" />
+  <meta name="theme-color" content="#07090E" media="(prefers-color-scheme: dark)" />
+  <meta name="theme-color" content="#F5F5F7" media="(prefers-color-scheme: light)" />
 
   <!-- Open Graph / Facebook / LinkedIn -->
   <meta property="og:type" content="website" />
@@ -220,16 +223,74 @@
     @media (prefers-reduced-motion: reduce) {
       *, ::before, ::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
     }
+    /* Theme tokens as r g b channels. Dark is the default; the system light setting swaps them. */
+    :root {
+      color-scheme: dark;
+      --c-fg: 255 255 255;
+      --c-slate-200: 226 232 240;
+      --c-slate-300: 203 213 225;
+      --c-slate-400: 148 163 184;
+      --c-slate-500: 128 143 165;
+      --c-slate-600: 71 85 105;
+      --c-dark-950: 7 9 14;
+      --c-dark-900: 11 15 23;
+      --c-dark-850: 17 23 38;
+      --c-dark-800: 24 34 56;
+      --c-dark-700: 34 48 78;
+      --c-dark-600: 51 65 85;
+      --grid-line: rgba(255, 255, 255, 0.03);
+      --aurora-a: rgba(16, 185, 129, 0.16);
+      --aurora-b: rgba(139, 92, 246, 0.13);
+      --aurora-c: rgba(6, 182, 212, 0.11);
+      --scroll-thumb: #22304E;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        color-scheme: light;
+        --c-fg: 29 29 31;
+        --c-slate-200: 29 29 31;
+        --c-slate-300: 51 56 66;
+        --c-slate-400: 83 91 105;
+        --c-slate-500: 99 108 122;
+        --c-slate-600: 115 122 134;
+        --c-dark-950: 245 245 247;
+        --c-dark-900: 255 255 255;
+        --c-dark-850: 250 250 252;
+        --c-dark-800: 226 228 233;
+        --c-dark-700: 208 212 220;
+        --c-dark-600: 160 168 180;
+        --grid-line: rgba(0, 0, 0, 0.045);
+        --aurora-a: rgba(16, 185, 129, 0.2);
+        --aurora-b: rgba(139, 92, 246, 0.14);
+        --aurora-c: rgba(6, 182, 212, 0.16);
+        --scroll-thumb: #cbd2dc;
+      }
+      /* Accent text and tints need more weight on a light surface to stay readable. */
+      .text-brand-300, .text-brand-400, .text-emerald-400 { color: #047857; }
+      .text-brand-500\/80 { color: rgba(4, 120, 87, 0.85); }
+      .text-rose-200, .text-rose-300, .text-rose-400 { color: #be123c; }
+      .text-amber-300, .text-amber-400 { color: #b45309; }
+      .text-cyan-400 { color: #0e7490; }
+      .text-blue-400 { color: #1d4ed8; }
+      .bg-rose-950\/40, .bg-rose-950\/60, .bg-rose-900\/60 { background-color: #fff1f2; }
+      .bg-amber-950\/40 { background-color: #fffbeb; }
+      .bg-brand-950\/40 { background-color: #ecfdf5; }
+      .border-rose-800\/60 { border-color: rgba(190, 18, 60, 0.35); }
+      .bg-black\/80 { background-color: rgba(245, 245, 247, 0.85); }
+      .glow-emerald { box-shadow: 0 10px 40px -12px rgba(16, 185, 129, 0.3); }
+      .glow-cyan { box-shadow: 0 10px 35px -10px rgba(6, 182, 212, 0.28); }
+      header.sticky, section.rounded-2xl { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 30px -14px rgba(0, 0, 0, 0.12); }
+    }
     body {
-      background-color: #07090E;
-      color: #E2E8F0;
+      background-color: rgb(var(--c-dark-950));
+      color: rgb(var(--c-slate-200));
       font-family: 'Inter', sans-serif;
     }
     .bg-grid {
       background-size: 32px 32px;
       background-image: 
-        linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-        linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+        linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+        linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
     }
     .glow-emerald {
       box-shadow: 0 0 40px -10px rgba(16, 185, 129, 0.25);
@@ -241,10 +302,10 @@
       width: 6px;
     }
     .terminal-scroll::-webkit-scrollbar-track {
-      background: #0B0F17;
+      background: rgb(var(--c-dark-900));
     }
     .terminal-scroll::-webkit-scrollbar-thumb {
-      background: #22304E;
+      background: var(--scroll-thumb);
       border-radius: 4px;
     }
     @keyframes pulse-slow {
@@ -253,6 +314,30 @@
     }
     .animate-pulse-slow {
       animation: pulse-slow 3s ease-in-out infinite;
+    }
+  </style>
+  <style>
+    /* Motion layer. Only transform and opacity animate. Everything below is skipped for reduced motion. */
+    .aurora { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+    .aurora i { position: absolute; width: 56vmax; height: 56vmax; border-radius: 50%; filter: blur(90px); will-change: transform; }
+    .aurora i:nth-child(1) { top: -22vmax; left: -14vmax; background: radial-gradient(circle, var(--aurora-a), transparent 65%); animation: drift-a 26s ease-in-out infinite alternate; }
+    .aurora i:nth-child(2) { top: 18vh; right: -22vmax; background: radial-gradient(circle, var(--aurora-b), transparent 65%); animation: drift-b 32s ease-in-out infinite alternate; }
+    .aurora i:nth-child(3) { bottom: -26vmax; left: 22vw; background: radial-gradient(circle, var(--aurora-c), transparent 65%); animation: drift-c 38s ease-in-out infinite alternate; }
+    @keyframes drift-a { to { transform: translate3d(14vmax, 10vmax, 0) scale(1.15); } }
+    @keyframes drift-b { to { transform: translate3d(-12vmax, 14vmax, 0) scale(0.9); } }
+    @keyframes drift-c { to { transform: translate3d(10vmax, -12vmax, 0) scale(1.1); } }
+    body > header, body > main, body > footer { position: relative; z-index: 1; }
+    .scroll-progress { position: fixed; top: 0; left: 0; right: 0; height: 2px; z-index: 60; transform-origin: 0 50%; transform: scaleX(0); background: linear-gradient(90deg, #10b981, #06b6d4, #8b5cf6); pointer-events: none; }
+    .js .reveal { opacity: 0; transform: translate3d(0, 38px, 0) scale(0.985); transition: opacity 0.9s cubic-bezier(0.16, 1, 0.3, 1), transform 0.9s cubic-bezier(0.16, 1, 0.3, 1); transition-delay: var(--reveal-delay, 0ms); }
+    .js .reveal.in { opacity: 1; transform: none; }
+    .js .reveal.in-done { will-change: auto; }
+    .hero-parallax { will-change: transform, opacity; transform-origin: 50% 0; }
+    .tilt-card { transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s; }
+    @media (hover: hover) { .tilt-card:hover { transform: translate3d(0, -4px, 0); } }
+    @media (prefers-reduced-motion: reduce) {
+      .aurora i { animation: none; }
+      .js .reveal { opacity: 1; transform: none; transition: none; }
+      .scroll-progress { display: none; }
     }
   </style>
   <style>
@@ -279,6 +364,9 @@
       if (el) el.innerText = window.__networkCallsCount;
     }
   </script>
+
+  <div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
+  <div class="scroll-progress" aria-hidden="true"></div>
 
   <!-- Top Navbar -->
   <header class="border-b border-dark-800 bg-dark-900/80 backdrop-blur-md sticky top-0 z-40">
@@ -679,7 +767,7 @@
           <span class="text-white font-bold block text-sm">Experience the verification barrier live in your browser:</span>
           <span class="text-slate-400">Click through the exact <code>verify</code> runbook gating MCP and A2A agents. Try dropping a database before taking a backup.</span>
         </div>
-        <a href="./agents/" class="px-4 py-2 rounded-lg bg-accent-violet hover:bg-accent-violet/80 text-white font-mono font-semibold shrink-0 transition flex items-center space-x-1.5">
+        <a href="./agents/" class="px-4 py-2 rounded-lg bg-accent-violet hover:bg-accent-violet/80 text-[#fff] font-mono font-semibold shrink-0 transition flex items-center space-x-1.5">
           <span>Launch Agents Barrier Demo →</span>
         </a>
       </div>
@@ -1947,7 +2035,7 @@ Error from server: admission webhook "gate.joltrin.dev" denied the request: step
             <i data-lucide="alert-circle" class="w-10 h-10 text-rose-400 mx-auto mb-3"></i>
             <h3 class="text-lg font-bold text-white mb-2">WebAssembly Module Not Found</h3>
             <p class="text-xs text-slate-400 mb-4 font-mono">Ensure 'sop.wasm' and 'wasm_exec.js' are compiled in the demo/ directory.</p>
-            <button onclick="location.reload()" class="px-4 py-2 bg-rose-600 hover:bg-rose-500 rounded-lg text-xs font-bold text-white">Retry Boot</button>
+            <button onclick="location.reload()" class="px-4 py-2 bg-rose-600 hover:bg-rose-500 rounded-lg text-xs font-bold text-[#fff]">Retry Boot</button>
           </div>
         `;
         lucide.createIcons();
@@ -2596,6 +2684,54 @@ Error from server: admission webhook "gate.joltrin.dev" denied the request: step
         var step = b.getAttribute('data-step'); if (step) attempt(step);
       });
       reset();
+    })();
+  </script>
+  <script>
+    // Scroll motion: section reveals, hero depth, progress bar. Skipped when the user asks for less motion.
+    (function () {
+      var calm = window.matchMedia('(prefers-reduced-motion: reduce)');
+      if (calm.matches || !('IntersectionObserver' in window)) return;
+      document.documentElement.classList.add('js');
+
+      var targets = document.querySelectorAll('main > section, main > div');
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+          if (!e.isIntersecting) return;
+          e.target.classList.add('in');
+          io.unobserve(e.target);
+        });
+      }, { threshold: 0.06, rootMargin: '0px 0px -8% 0px' });
+      targets.forEach(function (el, i) {
+        if (i === 0) return; // the hero moves with scroll instead
+        el.classList.add('reveal');
+        io.observe(el);
+      });
+
+      // Card grids cascade in instead of landing together.
+      document.querySelectorAll('#live-experiences > *').forEach(function (card, i) {
+        card.classList.add('tilt-card');
+        card.style.setProperty('--reveal-delay', (i * 90) + 'ms');
+      });
+
+      var hero = document.querySelector('main > section');
+      var bar = document.querySelector('.scroll-progress');
+      var ticking = false;
+      function frame() {
+        ticking = false;
+        var y = window.scrollY;
+        var max = document.documentElement.scrollHeight - window.innerHeight;
+        if (bar && max > 0) bar.style.transform = 'scaleX(' + Math.min(1, y / max) + ')';
+        if (hero) {
+          var p = Math.min(1, Math.max(0, y / (hero.offsetHeight * 0.9)));
+          hero.classList.add('hero-parallax');
+          hero.style.transform = 'translate3d(0,' + (p * 40) + 'px,0) scale(' + (1 - p * 0.04) + ')';
+          hero.style.opacity = String(1 - p * 0.55);
+        }
+      }
+      window.addEventListener('scroll', function () {
+        if (!ticking) { ticking = true; requestAnimationFrame(frame); }
+      }, { passive: true });
+      frame();
     })();
   </script>
 </body>
