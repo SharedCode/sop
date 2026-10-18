@@ -334,6 +334,11 @@
     .hero-parallax { will-change: transform, opacity; transform-origin: 50% 0; }
     .tilt-card { transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s; }
     @media (hover: hover) { .tilt-card:hover { transform: translate3d(0, -4px, 0); } }
+    /* Calmer rhythm: larger section headings, more air between panels, softer corners, glassy header. */
+    main h2.font-extrabold { font-size: clamp(1.75rem, 3.8vw, 2.75rem); letter-spacing: -0.03em; line-height: 1.08; }
+    main > section.mb-12 { margin-bottom: clamp(3rem, 7vw, 5.5rem); }
+    main > section.rounded-2xl { border-radius: 1.75rem; }
+    body > header.sticky { -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); }
     @media (prefers-reduced-motion: reduce) {
       .aurora i { animation: none; }
       .js .reveal { opacity: 1; transform: none; transition: none; }
