@@ -299,4 +299,13 @@ test.describe('Homepage', () => {
       expect(position).not.toBe('sticky');
     });
   });
+
+  test('hero is fully opaque when it first comes into view below the scroll story', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await page.locator('h1').scrollIntoViewIfNeeded();
+    await page.evaluate(() => window.scrollBy(0, -100));
+    await expect
+      .poll(() => page.locator('main > section').first().evaluate((el) => Number(getComputedStyle(el).opacity)))
+      .toBeGreaterThan(0.95);
+  });
 });

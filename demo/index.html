@@ -2825,7 +2825,8 @@ Error from server: admission webhook "gate.joltrin.dev" denied the request: step
         var max = document.documentElement.scrollHeight - window.innerHeight;
         if (bar && max > 0) bar.style.transform = 'scaleX(' + Math.min(1, y / max) + ')';
         if (hero) {
-          var p = Math.min(1, Math.max(0, y / (hero.offsetHeight * 0.9)));
+          // Fade by how far the hero has scrolled past the top, not by page scroll, so content above it does not dim it.
+          var p = Math.min(1, Math.max(0, -hero.parentElement.getBoundingClientRect().top / (hero.offsetHeight * 0.9)));
           hero.classList.add('hero-parallax');
           hero.style.transform = 'translate3d(0,' + (p * 40) + 'px,0) scale(' + (1 - p * 0.04) + ')';
           hero.style.opacity = String(1 - p * 0.55);
