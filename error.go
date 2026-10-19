@@ -36,8 +36,11 @@ type Error struct {
 
 // Error implements the error interface by formatting the code, user data, and wrapped error details.
 func (e Error) Error() string {
-	return fmt.Errorf("error code: %d, user data: %v, details: %w", e.Code, e.UserData, e.Err).Error()
+	return fmt.Sprintf("error code: %d, user data: %v, details: %v", e.Code, e.UserData, e.Err)
 }
+
+// Unwrap exposes the wrapped error for errors.Is/As.
+func (e Error) Unwrap() error { return e.Err }
 
 // ErrTimeout is returned when an operation exceeds its allowed time budget.
 //
