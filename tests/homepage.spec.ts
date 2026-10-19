@@ -88,13 +88,11 @@ test.describe('Homepage', () => {
     }
   });
 
-  test('intro video sits below the hero and autoplays muted', async ({ page }) => {
-    await page.goto('/', { waitUntil: 'domcontentloaded' });
+  test('intro video autoplays muted from the YouTube no-cookie embed', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'load' });
     const frame = page.locator('iframe[title="Joltrin intro video"]');
+    await frame.scrollIntoViewIfNeeded();
     await expect(frame).toHaveAttribute('src', /youtube-nocookie\.com\/embed\/WZbz868nTi4\?.*autoplay=1.*mute=1/);
-    const frameY = (await frame.boundingBox())!.y;
-    const heroY = (await page.getByRole('heading', { level: 1 }).boundingBox())!.y;
-    expect(frameY).toBeGreaterThan(heroY);
   });
 
   test('header has a Watch demo button that jumps to the video', async ({ page }) => {
@@ -298,5 +296,19 @@ test.describe('Homepage', () => {
       const position = await page.locator('.story-stage').evaluate((el) => getComputedStyle(el).position);
       expect(position).not.toBe('sticky');
     });
+  });
+
+  test('intro video sits right after the scroll story and autoplays muted when near', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'load' });
+    const frame = page.locator('#demo-video iframe');
+    const after = await page.evaluate(() => {
+      const end = document.querySelector('.story-end')!;
+      const vid = document.querySelector('#demo-video')!;
+      return !!(end.compareDocumentPosition(vid) & Node.DOCUMENT_POSITION_FOLLOWING);
+    });
+    expect(after, 'the video follows the story').toBe(true);
+    await expect(frame).not.toHaveAttribute('src', /./);
+    await frame.scrollIntoViewIfNeeded();
+    await expect(frame).toHaveAttribute('src', /autoplay=1.*mute=1|mute=1.*autoplay=1/);
   });
 });

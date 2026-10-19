@@ -373,7 +373,8 @@
     .story-row .no { color: #f43f5e; }
     .story-row .ok { color: #10b981; }
     .story-row .why { color: rgb(var(--c-slate-500)); text-align: right; }
-    .story-end { min-height: 100svh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 6rem 1.5rem; gap: 2.25rem; }
+    .story-video { position: relative; z-index: 1; width: 100%; max-width: 64rem; margin: 0 auto; padding: 0 1rem clamp(3rem, 8vw, 6rem); }
+    .story-end { min-height: 80svh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 6rem 1.5rem; gap: 2.25rem; }
     .story-end h2 { margin: 0; max-width: 16ch; }
     .story-end h2 em { font-style: normal; background: linear-gradient(90deg, #10b981, #06b6d4, #8b5cf6); -webkit-background-clip: text; background-clip: text; color: transparent; }
     .story-cta { display: flex; flex-wrap: wrap; gap: 0.75rem; justify-content: center; }
@@ -599,6 +600,19 @@
     </section>
   </div>
 
+  <!-- Intro video, right after the story. Autoplays muted once it is near the viewport. -->
+  <div class="story-video">
+    <section id="demo-video" aria-label="Joltrin intro video" class="scroll-mt-20 rounded-2xl overflow-hidden border border-dark-700/80 bg-dark-900">
+      <div class="relative w-full" style="aspect-ratio:16/9">
+        <iframe class="absolute inset-0 w-full h-full"
+          data-src="https://www.youtube-nocookie.com/embed/WZbz868nTi4?autoplay=1&mute=1&loop=1&playlist=WZbz868nTi4&playsinline=1&rel=0"
+          title="Joltrin intro video"
+          allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+          referrerpolicy="strict-origin-when-cross-origin"></iframe>
+      </div>
+    </section>
+  </div>
+
   <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
     <!-- Hero -->
@@ -664,16 +678,6 @@
     </section>
 
     <!-- Intro video (muted so browsers allow autoplay) -->
-    <section id="demo-video" aria-label="Joltrin intro video" class="scroll-mt-20 mb-8 rounded-2xl overflow-hidden border border-dark-700/80 bg-dark-900">
-      <div class="relative w-full" style="aspect-ratio:16/9">
-        <iframe class="absolute inset-0 w-full h-full"
-          data-src="https://www.youtube-nocookie.com/embed/WZbz868nTi4?autoplay=1&mute=1&loop=1&playlist=WZbz868nTi4&playsinline=1&rel=0"
-          title="Joltrin intro video"
-          allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-          referrerpolicy="strict-origin-when-cross-origin"></iframe>
-      </div>
-    </section>
-
     <!-- Second video (YouTube Short, vertical) -->
     <section aria-label="Joltrin short video" class="mb-8 mx-auto max-w-sm rounded-2xl overflow-hidden border border-dark-700/80 bg-dark-900">
       <div class="relative w-full" style="aspect-ratio:9/16">
@@ -2075,11 +2079,18 @@ Error from server: admission webhook "gate.joltrin.dev" denied the request: step
   <script>
     let selectedBenchOps = 5000;
 
-    // The intro video player is about 5 MB of scripts. It starts after the page
-    // has loaded, so it never delays the first paint or the load event.
+    // The intro video player is about 5 MB of scripts. It starts, muted and
+    // autoplaying, when the video is about to scroll into view, so it never
+    // delays the first paint or the load event.
     window.addEventListener("load", () => {
       const frame = document.querySelector('#demo-video iframe[data-src]');
-      if (frame) frame.src = frame.dataset.src;
+      if (!frame) return;
+      const start = () => { if (!frame.src) frame.src = frame.dataset.src; };
+      if (!('IntersectionObserver' in window)) return start();
+      const io = new IntersectionObserver((entries) => {
+        if (entries.some((e) => e.isIntersecting)) { start(); io.disconnect(); }
+      }, { rootMargin: '600px 0px' });
+      io.observe(frame);
     });
 
     // Initialize Lucide Icons
