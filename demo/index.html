@@ -1710,10 +1710,14 @@ Error from server: admission webhook "gate.joltrin.dev" denied the request: step
           </a>
         </div>
 
-        <div class="bg-dark-900 border border-brand-500/40 rounded-2xl p-6 flex flex-col justify-between">
+        <div class="relative bg-dark-900 border border-brand-500/60 ring-1 ring-brand-500/30 rounded-2xl p-6 flex flex-col justify-between shadow-xl shadow-brand-500/10">
           <div>
-            <h3 class="text-xs font-mono font-semibold uppercase tracking-wider text-brand-400 mb-3">Pro</h3>
-            <div class="mb-4"><span class="text-3xl font-extrabold text-white font-mono">$49</span> <span class="text-xs text-slate-500 font-mono">per month, per team</span></div>
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="text-xs font-mono font-semibold uppercase tracking-wider text-brand-400">Pro</h3>
+              <span class="text-[10px] font-mono font-semibold uppercase tracking-wider text-black bg-brand-400 rounded-full px-2 py-0.5">For teams</span>
+            </div>
+            <div class="mb-2"><span class="text-3xl font-extrabold text-white font-mono">$49</span> <span class="text-xs text-slate-500 font-mono">per month, per team</span></div>
+            <p class="text-xs text-slate-400 mb-4">One place for runbooks and policies, and a record of who changed what.</p>
             <ul class="space-y-2 text-xs text-slate-300 mb-6">
               <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-brand-400 shrink-0"></i><span>Everything in open source</span></li>
               <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-brand-400 shrink-0"></i><span>Policy-as-code for the barrier</span></li>
