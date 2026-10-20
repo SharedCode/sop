@@ -274,17 +274,13 @@ func TestHashmap_AllScenarios(t *testing.T) {
 
 	// --- Scenario: write error in updateFileBlockRegion (err != nil branch) ---
 	// Covered separately from partial write above which exercises (err == nil && n != blockSize).
-	dioWriteErr := newFileDirectIO()
 	segFileWE := filepath.Join(base, "writeerr-seg.reg")
-	if err := dioWriteErr.open(ctx, segFileWE, os.O_CREATE|os.O_RDWR, permission); err != nil {
-		t.Fatalf("open seg: %v", err)
+	// Seed a full block so read succeeds (avoids partial read branch). A plain
+	// file write is used because direct I/O rejects unaligned buffers with
+	// EINVAL, and Go does not align a make([]byte) allocation.
+	if err := os.WriteFile(segFileWE, make([]byte, blockSize), permission); err != nil {
+		t.Fatalf("seed full block: %v", err)
 	}
-	// Seed a full block so read succeeds (avoids partial read branch).
-	seed := make([]byte, blockSize)
-	if n, err := dioWriteErr.file.WriteAt(seed, 0); err != nil || n != blockSize {
-		t.Fatalf("seed full block: n=%d err=%v", n, err)
-	}
-	dioWriteErr.file.Close()
 	dioRO := newFileDirectIO()
 	if err := dioRO.open(ctx, segFileWE, os.O_RDONLY, permission); err != nil {
 		t.Fatalf("ro open: %v", err)
