@@ -386,6 +386,11 @@
     .js-story .story-intro > div { position: sticky; top: 0; height: 100svh; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; max-width: 58rem; margin: 0 auto; padding: 5rem 1.5rem 2rem; }
     .js-story .story-pin { height: 420vh; }
     .js-story .story-stage { position: sticky; top: 0; height: 100svh; min-height: 0; padding-top: 5.5rem; padding-bottom: 2rem; }
+    .story-hint { display: none; }
+    .js-story .story-hint { display: flex; align-items: center; gap: 0.5rem; margin: 2rem 0 0; font: 500 0.8rem/1 'JetBrains Mono', monospace; letter-spacing: 0.08em; text-transform: uppercase; color: rgb(var(--c-slate-400)); transition: opacity 0.4s; }
+    .js-story .story-hint.gone { opacity: 0; pointer-events: none; }
+    .story-hint span { display: inline-block; animation: story-nudge 1.6s ease-in-out infinite; }
+    @keyframes story-nudge { 0%, 100% { transform: translate3d(0, 0, 0); } 50% { transform: translate3d(0, 5px, 0); } }
     .js-story .story-words .w { color: rgb(var(--c-fg) / 0.16); }
     .js-story .story-words .w.lit { color: rgb(var(--c-fg)); }
     .js-story .story-verdict span { position: absolute; left: 0; top: 0; opacity: 0; transform: translate3d(0, 24px, 0); transition: opacity 0.5s, transform 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
@@ -561,6 +566,7 @@
       <div>
         <p class="story-eyebrow">Independent verification</p>
         <p class="story-words" id="story-line"><span class="w">An</span> <span class="w">agent</span> <span class="w">says</span> <span class="w">it</span> <span class="w">backed</span> <span class="w">up</span> <span class="w">the</span> <span class="w">database.</span> <span class="w">Joltrin</span> <span class="w">checks</span> <span class="w">the</span> <span class="w">record,</span> <span class="w">not</span> <span class="w">the</span> <span class="w">claim.</span></p>
+        <p class="story-hint" id="story-hint">Scroll down to continue <span aria-hidden="true">&darr;</span></p>
       </div>
     </section>
 
@@ -2853,9 +2859,11 @@ Error from server: admission webhook "gate.joltrin.dev" denied the request: step
       var pin = story.querySelector('.story-pin');
       var rows = story.querySelectorAll('.story-row');
       var tagged = story.querySelectorAll('[data-for]');
+      var hint = document.getElementById('story-hint');
       var step = -1, ticking = false;
       function frame() {
         ticking = false;
+        if (hint) hint.classList.toggle('gone', window.scrollY > 40);
         var vh = window.innerHeight;
         // Words: lit across the pinned intro track.
         var r = intro.getBoundingClientRect();
