@@ -287,6 +287,17 @@ test.describe('Homepage', () => {
       await expect(page.locator('.story-verdict .v-block')).not.toHaveClass(/show/);
     });
 
+    test('a scroll hint shows at the top and goes away once the visitor scrolls', async ({ page }) => {
+      await page.goto('/', { waitUntil: 'domcontentloaded' });
+      const hint = page.locator('#story-hint');
+      await expect(hint).toBeVisible();
+      await expect(hint).toContainText('Scroll down to continue');
+      await page.evaluate(() => window.scrollTo(0, 200));
+      await expect(hint).toHaveClass(/gone/);
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await expect(hint).not.toHaveClass(/gone/);
+    });
+
     test('reduced motion renders the finished story with no scripted pinning', async ({ page }) => {
       await page.emulateMedia({ reducedMotion: 'reduce' });
       await page.goto('/', { waitUntil: 'domcontentloaded' });
@@ -297,6 +308,7 @@ test.describe('Homepage', () => {
       }
       const position = await page.locator('.story-stage').evaluate((el) => getComputedStyle(el).position);
       expect(position).not.toBe('sticky');
+      await expect(page.locator('#story-hint')).toBeHidden();
     });
   });
 
