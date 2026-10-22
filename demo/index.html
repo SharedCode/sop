@@ -952,7 +952,7 @@ barrier -&gt; ALLOWED</pre>
             The result names which rule tripped, the state that is missing and the steps that would establish it, so the agent can replan from the block itself.
           </p>
           <p class="text-slate-400 text-sm mt-2 leading-relaxed">
-            In five runs where Claude Opus or Sonnet was allowed to run the other steps, it took the steps the block named and finished, and never repeated a blocked call. Haiku refused the task. That is a small sample, so the prompts, models and transcripts are written up in full.
+            In six runs where Claude Opus or Sonnet was allowed to run the other steps, five took the steps the block named and finished without repeating a blocked call. In the sixth, Claude Code's own safety check stopped a malformed call before it reached the server. Haiku refused the task. That is a small sample, so the prompts, models and transcripts are written up in full.
           </p>
           <a href="https://github.com/SharedCode/joltrin/blob/master/docs/AGENT_BARRIER_TESTS.md#does-the-agent-act-on-the-block-feedback" class="inline-block mt-3 text-sm font-mono text-brand-400 hover:text-brand-300 underline underline-offset-4">Read the agent test results</a>
         </div>
@@ -1454,7 +1454,7 @@ Error from server: admission webhook "gate.joltrin.dev" denied the request: step
         <div class="max-w-2xl mb-6">
           <div class="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-accent-cyan/10 border border-accent-cyan/30 text-accent-cyan text-xs font-mono mb-2">
             <i data-lucide="cpu" class="w-3.5 h-3.5"></i>
-            <span>128-Dimensional SIMD Dot-Product in WASM</span>
+            <span>128-Dimensional Dot-Product in WASM</span>
           </div>
           <h2 class="text-2xl font-bold text-white tracking-tight">Embedded Vector Similarity Search</h2>
           <p class="text-slate-300 text-sm mt-1">
