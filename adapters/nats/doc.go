@@ -30,4 +30,21 @@
 // and every barrier decision made through bridge is also published as a
 // BarrierDecision event to bridge's subject. See examples/verify_barrier_nats
 // for a full runnable demonstration, including a subscriber.
+//
+// # JetStream
+//
+// Plain NATS drops an event nobody is listening for. For decisions that must
+// be kept and replayed, opt in with WithJetStream, which stores each decision
+// in a stream, and read them back with SubscribeJetStream, a durable pull
+// consumer with explicit acknowledgement:
+//
+//	bridge, err := nats.NewVerifyBridge(wf, nc, "prod-db-rollout").
+//		WithJetStream(ctx, nats.JetStreamOptions{})
+//	// later, possibly after a restart:
+//	err = nats.SubscribeJetStream(ctx, nc, bridge.Subject(),
+//		nats.ConsumerOptions{Durable: "audit"}, func(ev nats.BarrierDecision) error { ... })
+//
+// The decision is made and returned before any publish, and a JetStream
+// failure is reported only through OnPublishError. A caller that never calls
+// WithJetStream gets the plain NATS behavior described above, unchanged.
 package nats
