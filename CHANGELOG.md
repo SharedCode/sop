@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Go is bumped to 1.26.10 and 1.27.3, which clears GO-2026-6809 in `crypto/x509` that the govulncheck and Trivy image scans now report against 1.26.9 and 1.27.2.
+
 ## v5.11.1
 
 - The release build for the Linux and Windows libraries pinned Go 1.26.8 and failed against the Go 1.26.9 requirement, so the v5.11.0 packages were not built. This release fixes the pin. It carries everything listed under v5.11.0.

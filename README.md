@@ -67,7 +67,7 @@ go run github.com/sharedcode/joltrin/v5/examples/agent_team@latest       # Jira,
 go run github.com/sharedcode/joltrin/v5/examples/quickstart@latest       # the embedded B-Tree that holds the state
 ```
 
-No clone needed, only Go 1.26.9 or newer. An older Go downloads 1.26.9 on its own. The first run downloads the modules and compiles, which took about 10 seconds on a MacBook Air, and later runs are quick. To read the code, or to run `./scripts/demo.sh --memory`, clone the repo.
+No clone needed, only Go 1.26.10 or newer. An older Go downloads 1.26.10 on its own. The first run downloads the modules and compiles, which took about 10 seconds on a MacBook Air, and later runs are quick. To read the code, or to run `./scripts/demo.sh --memory`, clone the repo.
 
 Or skip the install. These run in your browser with no backend:
 
@@ -124,7 +124,7 @@ go install github.com/sharedcode/joltrin/v5/cmd/sop-mcp-server@latest
 "$(go env GOPATH)/bin/sop-mcp-server" setup --apply
 ```
 
-The first `go install` downloads the Go modules, which took about 15 seconds on a MacBook Air. If your Go is older than 1.26.9, Go also downloads that toolchain once, about 240 MB.
+The first `go install` downloads the Go modules, which took about 15 seconds on a MacBook Air. If your Go is older than 1.26.10, Go also downloads that toolchain once, about 240 MB.
 
 </details>
 
