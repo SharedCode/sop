@@ -691,3 +691,31 @@ func TestJetStream_KeyReusedForOtherStepIsNotDeduplicated(t *testing.T) {
 		t.Fatalf("stream holds %d messages, want 2 (decision and refusal)", got)
 	}
 }
+
+// TestJetStream_DefaultStreamSharedCustomStreamScoped checks the stream
+// subjects WithJetStream creates: the default stream takes every workflow,
+// a custom stream only its own bridge's subject.
+func TestJetStream_DefaultStreamSharedCustomStreamScoped(t *testing.T) {
+	nc := startJetStreamServer(t)
+	ctx := context.Background()
+	for _, wfName := range []string{"one", "two"} {
+		bridge, err := NewVerifyBridge(dropProdWorkflow(t), nc, wfName).WithJetStream(ctx, JetStreamOptions{})
+		if err != nil {
+			t.Fatalf("WithJetStream(%q): %v", wfName, err)
+		}
+		if err := bridge.CheckAndCommit(verify.NewTrace(), "take_backup"); err != nil {
+			t.Fatalf("take_backup: %v", err)
+		}
+		if err := bridge.Flush(ctx); err != nil {
+			t.Fatalf("Flush: %v", err)
+		}
+	}
+	if got := streamMsgs(t, nc, DefaultStream); got != 2 {
+		t.Fatalf("default stream holds %d messages from two workflows, want 2", got)
+	}
+
+	custom := NewVerifyBridge(dropProdWorkflow(t), nc, "three")
+	if _, err := custom.WithJetStream(ctx, JetStreamOptions{Stream: "ONLY_THREE"}); err == nil {
+		t.Fatal("custom stream for a subject the default stream already captures should be rejected by the server as overlapping")
+	}
+}

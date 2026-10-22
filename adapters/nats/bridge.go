@@ -252,8 +252,11 @@ func (b *VerifyBridge) WithJetStream(ctx context.Context, opts JetStreamOptions)
 		if replicas == 0 {
 			replicas = 1
 		}
+		// The default stream is shared by every bridge, so it captures the
+		// whole joltrin.verify tree. A stream with a custom name holds only
+		// this bridge's subject, so it cannot overlap one it does not own.
 		subjects := []string{defaultStreamSubjects}
-		if !subjectCovered(subjects, b.subject) {
+		if name != DefaultStream {
 			subjects = []string{b.subject}
 		}
 		if _, err := js.CreateStream(ctx, jetstream.StreamConfig{
