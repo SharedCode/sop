@@ -1,13 +1,16 @@
 package nats
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/sharedcode/joltrin/v5/verify"
 )
@@ -346,5 +349,307 @@ func TestVerifyBridge_PublishFailureDoesNotChangeDecision(t *testing.T) {
 
 	if publishErrs != 2 {
 		t.Fatalf("OnPublishError called %d times, want 2", publishErrs)
+	}
+}
+
+// startJetStreamServer is startTestServer with JetStream enabled on a temp
+// store directory.
+func startJetStreamServer(t *testing.T) *nats.Conn {
+	t.Helper()
+
+	srv, err := server.NewServer(&server.Options{
+		Host:      "127.0.0.1",
+		Port:      -1,
+		NoLog:     true,
+		NoSigs:    true,
+		JetStream: true,
+		StoreDir:  t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("start embedded NATS server: %v", err)
+	}
+	go srv.Start()
+	if !srv.ReadyForConnections(5 * time.Second) {
+		t.Fatal("embedded NATS server did not become ready")
+	}
+	t.Cleanup(srv.Shutdown)
+
+	nc, err := nats.Connect(srv.ClientURL())
+	if err != nil {
+		t.Fatalf("connect to embedded NATS server: %v", err)
+	}
+	t.Cleanup(nc.Close)
+	return nc
+}
+
+func jsBridge(t *testing.T, nc *nats.Conn, opts JetStreamOptions) *VerifyBridge {
+	t.Helper()
+	bridge, err := NewVerifyBridge(dropProdWorkflow(t), nc, "prod-db-rollout").WithJetStream(context.Background(), opts)
+	if err != nil {
+		t.Fatalf("WithJetStream: %v", err)
+	}
+	return bridge
+}
+
+func streamMsgs(t *testing.T, nc *nats.Conn, name string) uint64 {
+	t.Helper()
+	js, err := jetstream.New(nc)
+	if err != nil {
+		t.Fatalf("jetstream.New: %v", err)
+	}
+	stream, err := js.Stream(context.Background(), name)
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	info, err := stream.Info(context.Background())
+	if err != nil {
+		t.Fatalf("Stream.Info: %v", err)
+	}
+	return info.State.Msgs
+}
+
+// TestJetStream_StoredWhileConsumerOffline publishes before any consumer
+// exists, then starts a durable consumer and expects every decision.
+func TestJetStream_StoredWhileConsumerOffline(t *testing.T) {
+	nc := startJetStreamServer(t)
+	bridge := jsBridge(t, nc, JetStreamOptions{})
+	trace := verify.NewTrace()
+
+	if err := bridge.CheckAndCommit(trace, "drop_prod_db"); err == nil {
+		t.Fatal("drop_prod_db should be blocked before a backup is validated")
+	}
+	if err := bridge.CheckAndCommit(trace, "take_backup"); err != nil {
+		t.Fatalf("take_backup: %v", err)
+	}
+	if err := bridge.Flush(context.Background()); err != nil {
+		t.Fatalf("Flush: %v", err)
+	}
+	if got := streamMsgs(t, nc, DefaultStream); got != 2 {
+		t.Fatalf("stream holds %d messages, want 2", got)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var (
+		mu  sync.Mutex
+		got []BarrierDecision
+	)
+	errc := make(chan error, 1)
+	go func() {
+		errc <- SubscribeJetStream(ctx, nc, bridge.Subject(), ConsumerOptions{Durable: "late"}, func(ev BarrierDecision) error {
+			mu.Lock()
+			got = append(got, ev)
+			mu.Unlock()
+			return nil
+		})
+	}()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		mu.Lock()
+		n := len(got)
+		mu.Unlock()
+		if n == 2 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("got %d decisions, want 2", n)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	mu.Lock()
+	if got[0].Allowed || got[0].Step != "drop_prod_db" || !got[1].Allowed || got[1].Step != "take_backup" {
+		t.Errorf("unexpected decisions: %+v", got)
+	}
+	mu.Unlock()
+
+	cancel()
+	if err := <-errc; !errors.Is(err, context.Canceled) {
+		t.Fatalf("SubscribeJetStream returned %v, want context.Canceled", err)
+	}
+}
+
+// TestJetStream_DuplicateIdempotentPublishStoredOnce retries one idempotent
+// call; the retry is published with the same message ID and stored once.
+func TestJetStream_DuplicateIdempotentPublishStoredOnce(t *testing.T) {
+	nc := startJetStreamServer(t)
+	bridge := jsBridge(t, nc, JetStreamOptions{})
+	trace := verify.NewTrace()
+
+	if replayed, err := bridge.CheckAndCommitIdempotent(trace, "take_backup", "k1"); err != nil || replayed {
+		t.Fatalf("first call: replayed=%v err=%v", replayed, err)
+	}
+	if replayed, err := bridge.CheckAndCommitIdempotent(trace, "take_backup", "k1"); err != nil || !replayed {
+		t.Fatalf("retry: replayed=%v err=%v", replayed, err)
+	}
+	if err := bridge.Flush(context.Background()); err != nil {
+		t.Fatalf("Flush: %v", err)
+	}
+	if got := streamMsgs(t, nc, DefaultStream); got != 1 {
+		t.Fatalf("stream holds %d messages after a retry, want 1", got)
+	}
+}
+
+// TestJetStream_UnackedMessageRedelivered returns an error from the handler
+// on the first delivery and expects the server to redeliver after AckWait.
+func TestJetStream_UnackedMessageRedelivered(t *testing.T) {
+	nc := startJetStreamServer(t)
+	bridge := jsBridge(t, nc, JetStreamOptions{})
+	if err := bridge.CheckAndCommit(verify.NewTrace(), "take_backup"); err != nil {
+		t.Fatalf("take_backup: %v", err)
+	}
+	if err := bridge.Flush(context.Background()); err != nil {
+		t.Fatalf("Flush: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var (
+		mu       sync.Mutex
+		attempts int
+	)
+	delivered := make(chan struct{})
+	go func() {
+		_ = SubscribeJetStream(ctx, nc, bridge.Subject(), ConsumerOptions{Durable: "retry", AckWait: 200 * time.Millisecond, MaxDeliver: 3}, func(BarrierDecision) error {
+			mu.Lock()
+			defer mu.Unlock()
+			attempts++
+			if attempts == 1 {
+				return errors.New("not ready")
+			}
+			select {
+			case <-delivered:
+			default:
+				close(delivered)
+			}
+			return nil
+		})
+	}()
+
+	select {
+	case <-delivered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("message was not redelivered after AckWait")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if attempts != 2 {
+		t.Errorf("attempts = %d, want 2", attempts)
+	}
+}
+
+// TestJetStream_PublishFailureDoesNotChangeDecision removes the stream so
+// the publish fails, then checks the barrier's answer is the one verify
+// gives on its own and the failure reached OnPublishError.
+func TestJetStream_PublishFailureDoesNotChangeDecision(t *testing.T) {
+	nc := startJetStreamServer(t)
+	failed := make(chan error, 4)
+	bridge := jsBridge(t, nc, JetStreamOptions{}).OnPublishError(func(err error) {
+		select {
+		case failed <- err:
+		default:
+		}
+	})
+
+	js, err := jetstream.New(nc)
+	if err != nil {
+		t.Fatalf("jetstream.New: %v", err)
+	}
+	if err := js.DeleteStream(context.Background(), DefaultStream); err != nil {
+		t.Fatalf("DeleteStream: %v", err)
+	}
+
+	wantErr := dropProdWorkflow(t).CheckAndCommit(verify.NewTrace(), "drop_prod_db")
+	gotErr := bridge.CheckAndCommit(verify.NewTrace(), "drop_prod_db")
+	var want, got *verify.Violation
+	if !errors.As(wantErr, &want) || !errors.As(gotErr, &got) || got.Rule != want.Rule || gotErr.Error() != wantErr.Error() {
+		t.Fatalf("bridge decision %v differs from verify's %v", gotErr, wantErr)
+	}
+
+	select {
+	case err := <-failed:
+		if err == nil {
+			t.Fatal("OnPublishError called with nil")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("publish failure was not reported to OnPublishError")
+	}
+}
+
+func TestJetStream_ExistingStreamMustCaptureSubject(t *testing.T) {
+	nc := startJetStreamServer(t)
+	js, err := jetstream.New(nc)
+	if err != nil {
+		t.Fatalf("jetstream.New: %v", err)
+	}
+	if _, err := js.CreateStream(context.Background(), jetstream.StreamConfig{Name: "OTHER", Subjects: []string{"other.>"}}); err != nil {
+		t.Fatalf("CreateStream: %v", err)
+	}
+	_, err = NewVerifyBridge(dropProdWorkflow(t), nc, "prod-db-rollout").WithJetStream(context.Background(), JetStreamOptions{Stream: "OTHER"})
+	if err == nil {
+		t.Fatal("WithJetStream accepted a stream that does not capture the bridge's subject")
+	}
+}
+
+func TestSubscribeJetStream_RequiresDurableAndTermsMalformed(t *testing.T) {
+	nc := startJetStreamServer(t)
+	if err := SubscribeJetStream(context.Background(), nc, DefaultSubject, ConsumerOptions{}, nil); err == nil {
+		t.Fatal("SubscribeJetStream accepted an empty Durable")
+	}
+
+	bridge := jsBridge(t, nc, JetStreamOptions{})
+	// A plain request to a stream subject is stored by the stream with no
+	// payload check, so this puts an unparseable message ahead of the real
+	// decision.
+	if _, err := nc.Request(bridge.Subject(), []byte("not json"), 2*time.Second); err != nil {
+		t.Fatalf("publish malformed message: %v", err)
+	}
+	if err := bridge.CheckAndCommit(verify.NewTrace(), "take_backup"); err != nil {
+		t.Fatalf("take_backup: %v", err)
+	}
+	if err := bridge.Flush(context.Background()); err != nil {
+		t.Fatalf("Flush: %v", err)
+	}
+	if n := streamMsgs(t, nc, DefaultStream); n != 2 {
+		t.Fatalf("stream holds %d messages, want 2 (one malformed, one valid)", n)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	got := make(chan BarrierDecision, 2)
+	go func() {
+		_ = SubscribeJetStream(ctx, nc, bridge.Subject(), ConsumerOptions{Durable: "mixed"}, func(ev BarrierDecision) error {
+			got <- ev
+			return nil
+		})
+	}()
+	select {
+	case ev := <-got:
+		if ev.Step != "take_backup" {
+			t.Errorf("handler saw %+v, want the take_backup decision", ev)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("valid decision behind a malformed message was not delivered")
+	}
+}
+
+func TestSubjectCovered(t *testing.T) {
+	cases := []struct {
+		patterns []string
+		subject  string
+		want     bool
+	}{
+		{[]string{"joltrin.verify.>"}, DefaultSubject, true},
+		{[]string{"joltrin.verify.>"}, "joltrin.verify.a.decision", true},
+		{[]string{"joltrin.verify.*.decision"}, "joltrin.verify.a.decision", true},
+		{[]string{"joltrin.verify.*.decision"}, DefaultSubject, false},
+		{[]string{"joltrin.verify.decision"}, "joltrin.verify.decision.extra", false},
+		{[]string{"other.>"}, DefaultSubject, false},
+		{[]string{"joltrin.>"}, "joltrin", false},
+	}
+	for _, c := range cases {
+		if got := subjectCovered(c.patterns, c.subject); got != c.want {
+			t.Errorf("subjectCovered(%v, %q) = %v, want %v", c.patterns, c.subject, got, c.want)
+		}
 	}
 }

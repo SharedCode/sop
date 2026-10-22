@@ -2,7 +2,9 @@
 
 ## Unreleased
 
+- `adapters/nats` can store barrier decisions in JetStream. `VerifyBridge.WithJetStream` creates the stream or checks that an existing one captures the bridge's subject, and publishes each decision asynchronously, so the barrier's answer is never delayed or changed by a publish failure; failures go to `OnPublishError`, and `Flush` waits for pending acknowledgements. `CheckAndCommitIdempotent` publishes with a message ID built from the workflow and idempotency key, so a retry is stored once inside the stream's duplicate window. `SubscribeJetStream` reads them back through a durable pull consumer with explicit acknowledgement, `AckWait` and `MaxDeliver`, so a consumer that was offline catches up. Without `WithJetStream` the bridge behaves exactly as before.
 - Go is bumped to 1.26.10 and 1.27.3, which clears GO-2026-6809 in `crypto/x509` that the govulncheck and Trivy image scans now report against 1.26.9 and 1.27.2.
+
 
 ## v5.11.1
 
