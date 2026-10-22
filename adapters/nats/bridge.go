@@ -2,6 +2,8 @@ package nats
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -172,7 +174,7 @@ func (b *VerifyBridge) publish(step verify.StepID, replayed bool, idempotencyKey
 	}
 
 	if b.js != nil {
-		b.publishJetStream(data, idempotencyKey)
+		b.publishJetStream(data, step, idempotencyKey)
 		return
 	}
 
@@ -290,14 +292,28 @@ func (b *VerifyBridge) Flush(ctx context.Context) error {
 	}
 }
 
-func (b *VerifyBridge) publishJetStream(data []byte, idempotencyKey string) {
+func (b *VerifyBridge) publishJetStream(data []byte, step verify.StepID, idempotencyKey string) {
 	var opts []jetstream.PublishOpt
 	if idempotencyKey != "" {
-		opts = append(opts, jetstream.WithMsgID(b.workflow+"/"+idempotencyKey))
+		opts = append(opts, jetstream.WithMsgID(messageID(b.workflow, step, idempotencyKey)))
 	}
 	if _, err := b.js.PublishMsgAsync(&nats.Msg{Subject: b.subject, Data: data}, opts...); err != nil && b.onPublishError != nil {
 		b.onPublishError(fmt.Errorf("nats: jetstream publish barrier decision: %w", err))
 	}
+}
+
+// messageID returns the Nats-Msg-Id for an idempotent decision: a SHA-256 of
+// the workflow, step, and idempotency key, each length-prefixed so no choice
+// of values can make two different triples produce the same input. The step
+// is part of it because verify refuses to reuse a key for a different step;
+// without the step, that refusal would share an ID with the original
+// decision and be dropped as a duplicate.
+func messageID(workflow string, step verify.StepID, key string) string {
+	h := sha256.New()
+	for _, part := range []string{workflow, string(step), key} {
+		fmt.Fprintf(h, "%d:%s", len(part), part)
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 // subjectCovered reports whether subject matches any of the stream subject

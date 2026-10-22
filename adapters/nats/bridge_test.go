@@ -653,3 +653,41 @@ func TestSubjectCovered(t *testing.T) {
 		}
 	}
 }
+
+// TestMessageID_UnambiguousAndStepScoped pins the two properties the
+// de-duplication relies on: different inputs never share an ID, including
+// inputs that would collide under a plain "/" join, and the step is part of
+// the ID.
+func TestMessageID_UnambiguousAndStepScoped(t *testing.T) {
+	if messageID("a/b", "s", "c") == messageID("a", "s", "b/c") {
+		t.Error("workflow/key boundary is ambiguous")
+	}
+	if messageID("w", "s1", "k") == messageID("w", "s2", "k") {
+		t.Error("step is not part of the message ID")
+	}
+	if messageID("w", "s", "k") != messageID("w", "s", "k") {
+		t.Error("message ID is not stable")
+	}
+}
+
+// TestJetStream_KeyReusedForOtherStepIsNotDeduplicated reuses an idempotency
+// key for a different step. verify refuses it; that refusal must be stored
+// as its own event, not dropped as a duplicate of the first decision.
+func TestJetStream_KeyReusedForOtherStepIsNotDeduplicated(t *testing.T) {
+	nc := startJetStreamServer(t)
+	bridge := jsBridge(t, nc, JetStreamOptions{})
+	trace := verify.NewTrace()
+
+	if _, err := bridge.CheckAndCommitIdempotent(trace, "take_backup", "k1"); err != nil {
+		t.Fatalf("first call: %v", err)
+	}
+	if _, err := bridge.CheckAndCommitIdempotent(trace, "validate_backup", "k1"); err == nil {
+		t.Fatal("reusing a key for another step should be refused")
+	}
+	if err := bridge.Flush(context.Background()); err != nil {
+		t.Fatalf("Flush: %v", err)
+	}
+	if got := streamMsgs(t, nc, DefaultStream); got != 2 {
+		t.Fatalf("stream holds %d messages, want 2 (decision and refusal)", got)
+	}
+}
