@@ -1,6 +1,6 @@
 module github.com/sharedcode/joltrin/ai
 
-go 1.26.9
+go 1.26.10
 
 require (
 	github.com/google/cel-go v0.30.0

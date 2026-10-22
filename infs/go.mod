@@ -1,6 +1,6 @@
 module github.com/sharedcode/joltrin/infs
 
-go 1.26.9
+go 1.26.10
 
 require (
 	github.com/sharedcode/joltrin/adapters/redis v0.1.0
