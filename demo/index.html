@@ -3,10 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Joltrin | Independent verification before AI agents act</title>
-  <meta name="description" content="Check an AI agent's proposed action against recorded workflow state and explicit prerequisites before it commits, and get an actionable decision when a step is missing. A Go verification engine with MCP and A2A servers. Open source." />
+  <title>Joltrin | Stop an AI agent from running a risky step too early</title>
+  <meta name="description" content="Joltrin blocks an AI agent&#39;s risky step, like dropping a database, until the steps before it are recorded, and tells the agent what to do first. Open source. Try it in your browser." />
   <meta name="keywords" content="AI agent verification barrier, independent verifier, deterministic preconditions, AI agent safety, MCP, A2A, agent policy enforcement, Go, WebAssembly" />
   <link rel="canonical" href="https://joltrinhq.com/" />
+  <meta name="color-scheme" content="dark light" />
+  <meta name="theme-color" content="#07090E" media="(prefers-color-scheme: dark)" />
+  <meta name="theme-color" content="#F4F5F8" media="(prefers-color-scheme: light)" />
 
   <!-- Open Graph / Facebook / LinkedIn -->
   <meta property="og:type" content="website" />
@@ -38,6 +41,27 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <script>window.lucide = { createIcons: function () {} };</script>
   <script src="https://unpkg.com/lucide@1.52.0/dist/umd/lucide.min.js" integrity="sha384-SSRIJfpvnhji4rCcULgpNXRJjQ9P/odU9OaWxSumsZiokvJ7zAu4PGQVWyWxTG3u" crossorigin="anonymous" defer></script>
+
+  <!-- Privacy-light analytics (no cookies, no personal data). Events are sent through track() below. -->
+  <script defer data-domain="joltrinhq.com" src="https://plausible.io/js/script.js"></script>
+  <script>
+    window.plausible = window.plausible || function () { (window.plausible.q = window.plausible.q || []).push(arguments); };
+    function track(name) { try { window.plausible(name); } catch (e) {} }
+    function copyQuickstart(btn) {
+      var cmd = document.getElementById('quickstart-cmd').innerText.trim();
+      track('copy_quickstart');
+      navigator.clipboard.writeText(cmd).then(
+        function () { btn.innerText = 'Copied'; },
+        function () { btn.innerText = 'Select and copy'; }
+      );
+    }
+    document.addEventListener('click', function (e) {
+      var a = e.target.closest && e.target.closest('a[href]'); if (!a) return;
+      var h = a.getAttribute('href') || '';
+      if (/\/docs\/|README|#try-it-in-five-minutes/.test(h)) track('docs_click');
+      else if (/^https:\/\/github\.com\//.test(h)) track('github_click');
+    });
+  </script>
 
   <!-- Go WebAssembly Runtime Support -->
   <script src="wasm_exec.js"></script>
@@ -220,16 +244,78 @@
     @media (prefers-reduced-motion: reduce) {
       *, ::before, ::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
     }
+    /* Theme tokens as r g b channels. Dark is the default; the system light setting swaps them. */
+    :root {
+      color-scheme: dark;
+      --c-fg: 255 255 255;
+      --c-slate-200: 226 232 240;
+      --c-slate-300: 203 213 225;
+      --c-slate-400: 148 163 184;
+      --c-slate-500: 128 143 165;
+      --c-slate-600: 71 85 105;
+      --c-dark-950: 7 9 14;
+      --c-dark-900: 11 15 23;
+      --c-dark-850: 17 23 38;
+      --c-dark-800: 24 34 56;
+      --c-dark-750: 29 41 67;
+      --c-dark-700: 34 48 78;
+      --c-brand-950: 2 44 34;
+      --c-dark-600: 51 65 85;
+      --grid-line: rgba(255, 255, 255, 0.03);
+      --aurora-a: rgba(16, 185, 129, 0.16);
+      --aurora-b: rgba(139, 92, 246, 0.13);
+      --aurora-c: rgba(6, 182, 212, 0.11);
+      --scroll-thumb: #22304E;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        color-scheme: light;
+        --c-fg: 24 28 36;
+        --c-slate-200: 24 28 36;
+        --c-slate-300: 51 56 66;
+        --c-slate-400: 83 91 105;
+        --c-slate-500: 99 108 122;
+        --c-slate-600: 115 122 134;
+        --c-dark-950: 244 245 248;
+        --c-dark-900: 255 255 255;
+        --c-dark-850: 250 250 252;
+        --c-dark-800: 226 228 233;
+        --c-dark-750: 217 220 227;
+        --c-dark-700: 208 212 220;
+        --c-brand-950: 236 253 245;
+        --c-dark-600: 160 168 180;
+        --grid-line: rgba(0, 0, 0, 0.045);
+        --aurora-a: rgba(16, 185, 129, 0.2);
+        --aurora-b: rgba(139, 92, 246, 0.14);
+        --aurora-c: rgba(6, 182, 212, 0.16);
+        --scroll-thumb: #cbd2dc;
+      }
+      /* Accent text and tints need more weight on a light surface to stay readable. */
+      .text-brand-300, .text-brand-400, .text-emerald-400 { color: #047857; }
+      .text-brand-500\/80 { color: rgba(4, 120, 87, 0.85); }
+      .text-rose-200, .text-rose-300, .text-rose-400 { color: #be123c; }
+      .text-amber-300, .text-amber-400 { color: #b45309; }
+      .text-cyan-400 { color: #0e7490; }
+      .text-blue-400 { color: #1d4ed8; }
+      .bg-rose-950\/40, .bg-rose-950\/60, .bg-rose-900\/60 { background-color: #fff1f2; }
+      .bg-amber-950\/40 { background-color: #fffbeb; }
+      .bg-brand-950\/40 { background-color: #ecfdf5; }
+      .border-rose-800\/60 { border-color: rgba(190, 18, 60, 0.35); }
+      .bg-black\/80 { background-color: rgba(244, 245, 248, 0.85); }
+      .glow-emerald { box-shadow: 0 10px 40px -12px rgba(16, 185, 129, 0.3); }
+      .glow-cyan { box-shadow: 0 10px 35px -10px rgba(6, 182, 212, 0.28); }
+      header.sticky, section.rounded-2xl { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 30px -14px rgba(0, 0, 0, 0.12); }
+    }
     body {
-      background-color: #07090E;
-      color: #E2E8F0;
+      background-color: rgb(var(--c-dark-950));
+      color: rgb(var(--c-slate-200));
       font-family: 'Inter', sans-serif;
     }
     .bg-grid {
       background-size: 32px 32px;
       background-image: 
-        linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-        linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+        linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+        linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
     }
     .glow-emerald {
       box-shadow: 0 0 40px -10px rgba(16, 185, 129, 0.25);
@@ -241,10 +327,10 @@
       width: 6px;
     }
     .terminal-scroll::-webkit-scrollbar-track {
-      background: #0B0F17;
+      background: rgb(var(--c-dark-900));
     }
     .terminal-scroll::-webkit-scrollbar-thumb {
-      background: #22304E;
+      background: var(--scroll-thumb);
       border-radius: 4px;
     }
     @keyframes pulse-slow {
@@ -254,6 +340,90 @@
     .animate-pulse-slow {
       animation: pulse-slow 3s ease-in-out infinite;
     }
+  </style>
+  <style>
+    /* Motion layer. Only transform and opacity animate. Everything below is skipped for reduced motion. */
+    .aurora { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+    .aurora i { position: absolute; width: 56vmax; height: 56vmax; border-radius: 50%; filter: blur(90px); will-change: transform; }
+    .aurora i:nth-child(1) { top: -22vmax; left: -14vmax; background: radial-gradient(circle, var(--aurora-a), transparent 65%); animation: drift-a 26s ease-in-out infinite alternate; }
+    .aurora i:nth-child(2) { top: 18vh; right: -22vmax; background: radial-gradient(circle, var(--aurora-b), transparent 65%); animation: drift-b 32s ease-in-out infinite alternate; }
+    .aurora i:nth-child(3) { bottom: -26vmax; left: 22vw; background: radial-gradient(circle, var(--aurora-c), transparent 65%); animation: drift-c 38s ease-in-out infinite alternate; }
+    @keyframes drift-a { to { transform: translate3d(14vmax, 10vmax, 0) scale(1.15); } }
+    @keyframes drift-b { to { transform: translate3d(-12vmax, 14vmax, 0) scale(0.9); } }
+    @keyframes drift-c { to { transform: translate3d(10vmax, -12vmax, 0) scale(1.1); } }
+    body > header, body > main, body > footer { position: relative; z-index: 1; }
+    .scroll-progress { position: fixed; top: 0; left: 0; right: 0; height: 2px; z-index: 60; transform-origin: 0 50%; transform: scaleX(0); background: linear-gradient(90deg, #10b981, #06b6d4, #8b5cf6); pointer-events: none; }
+    .js .reveal { opacity: 0; transform: translate3d(0, 38px, 0) scale(0.985); transition: opacity 0.9s cubic-bezier(0.16, 1, 0.3, 1), transform 0.9s cubic-bezier(0.16, 1, 0.3, 1); transition-delay: var(--reveal-delay, 0ms); }
+    .js .reveal.in { opacity: 1; transform: none; }
+    .js .reveal.in-done { will-change: auto; }
+    .hero-parallax { will-change: transform, opacity; transform-origin: 50% 0; }
+    .tilt-card { transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s; }
+    @media (hover: hover) { .tilt-card:hover { transform: translate3d(0, -4px, 0); } }
+    /* Calmer rhythm: larger section headings, more air between panels, softer corners, glassy header. */
+    main h2.font-extrabold { font-size: clamp(1.75rem, 3.8vw, 2.75rem); letter-spacing: -0.03em; line-height: 1.08; }
+    main > section.mb-12 { margin-bottom: clamp(3rem, 7vw, 5.5rem); }
+    main > section.rounded-2xl { border-radius: 1.75rem; }
+    body > header.sticky { -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); }
+    @media (prefers-reduced-motion: reduce) {
+      .aurora i { animation: none; }
+      .js .reveal { opacity: 1; transform: none; transition: none; }
+      .scroll-progress { display: none; }
+    }
+  </style>
+  <style>
+    /* Scroll story. Default markup is the finished state, so it reads fine without scripts or with reduced motion. */
+    .story { position: relative; z-index: 1; }
+    .story-words, .story-end h2 { font-weight: 700; letter-spacing: -0.035em; line-height: 1.06; font-size: clamp(2rem, 6.2vw, 4.75rem); }
+    .story-intro { min-height: 100svh; display: flex; align-items: center; justify-content: center; padding: 6rem 1.5rem; }
+    .story-intro p { max-width: 58rem; margin: 0; }
+    .story-eyebrow { font: 500 0.75rem/1 'JetBrains Mono', monospace; letter-spacing: 0.14em; text-transform: uppercase; color: rgb(var(--c-slate-400)); margin: 0 0 1.5rem; }
+    .story-words .w { color: rgb(var(--c-fg)); transition: color 0.25s linear; }
+    .story-pin { position: relative; }
+    .story-stage { min-height: 100svh; display: grid; grid-template-columns: minmax(0, 1fr); gap: 2.5rem; align-items: center; align-content: center; max-width: 72rem; margin: 0 auto; padding: 5rem 1.5rem; }
+    @media (min-width: 900px) { .story-stage { grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 4rem; } }
+    .story-verdict { font-weight: 800; letter-spacing: -0.04em; line-height: 1; font-size: clamp(3rem, 9vw, 7rem); margin: 0 0 1.25rem; min-height: 1.05em; position: relative; }
+    .story-verdict span { display: block; }
+    .story-verdict .v-block { color: #f43f5e; }
+    .story-verdict .v-allow { color: #10b981; }
+    .story-note { color: rgb(var(--c-slate-300)); font-size: clamp(1rem, 1.6vw, 1.25rem); max-width: 30rem; margin: 0; min-height: 4.8em; }
+    .story-card { border: 1px solid rgb(var(--c-dark-700)); background: rgb(var(--c-dark-900)); border-radius: 1.25rem; padding: 1.25rem 1.25rem 1rem; font-family: 'JetBrains Mono', monospace; font-size: clamp(0.78rem, 1.5vw, 0.95rem); box-shadow: 0 30px 80px -30px rgba(16, 185, 129, 0.25); }
+    .story-card .hd { color: rgb(var(--c-slate-500)); font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; margin: 0 0 0.9rem; }
+    .story-row { display: flex; justify-content: space-between; gap: 1rem; padding: 0.7rem 0; border-top: 1px solid rgb(var(--c-dark-800)); color: rgb(var(--c-slate-300)); }
+    .story-row:first-of-type { border-top: 0; }
+    .story-row b { font-weight: 600; white-space: nowrap; }
+    .story-row .no { color: #f43f5e; }
+    .story-row .ok { color: #10b981; }
+    .story-row .why { color: rgb(var(--c-slate-500)); text-align: right; }
+    .story-end { min-height: 100svh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 6rem 1.5rem; gap: 2.25rem; }
+    .story-end h2 { margin: 0; max-width: 16ch; }
+    .story-end h2 em { font-style: normal; background: linear-gradient(90deg, #10b981, #06b6d4, #8b5cf6); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .story-cta { display: flex; flex-wrap: wrap; gap: 0.75rem; justify-content: center; }
+    .story-cta a { padding: 0.85rem 1.4rem; border-radius: 999px; font-weight: 600; font-size: 0.95rem; transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
+    .story-cta a:hover { transform: translate3d(0, -2px, 0); }
+    .story-cta .primary { background: #10b981; color: #000; }
+    .story-cta .ghost { border: 1px solid rgb(var(--c-dark-700)); color: rgb(var(--c-fg)); background: rgb(var(--c-dark-900) / 0.6); }
+    /* Scripted mode: the pin track is tall and the stage sticks while scroll drives the steps. */
+    .js-story .story-intro { display: block; height: 230vh; padding: 0; }
+    .js-story .story-intro > div { position: sticky; top: 0; height: 100svh; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; max-width: 58rem; margin: 0 auto; padding: 5rem 1.5rem 2rem; }
+    .js-story .story-pin { height: 420vh; }
+    .js-story .story-stage { position: sticky; top: 0; height: 100svh; min-height: 0; padding-top: 5.5rem; padding-bottom: 2rem; }
+    .story-hint { display: none; }
+    .js-story .story-hint { display: flex; align-items: center; gap: 0.5rem; margin: 2rem 0 0; font: 500 0.8rem/1 'JetBrains Mono', monospace; letter-spacing: 0.08em; text-transform: uppercase; color: rgb(var(--c-slate-400)); transition: opacity 0.4s; }
+    .js-story .story-hint.gone { opacity: 0; pointer-events: none; }
+    .story-hint span { display: inline-block; animation: story-nudge 1.6s ease-in-out infinite; }
+    @keyframes story-nudge { 0%, 100% { transform: translate3d(0, 0, 0); } 50% { transform: translate3d(0, 5px, 0); } }
+    .js-story .story-words .w { color: rgb(var(--c-fg) / 0.16); }
+    .js-story .story-words .w.lit { color: rgb(var(--c-fg)); }
+    .js-story .story-verdict span { position: absolute; left: 0; top: 0; opacity: 0; transform: translate3d(0, 24px, 0); transition: opacity 0.5s, transform 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
+    .js-story .story-verdict span.show { opacity: 1; transform: none; }
+    .js-story .story-note span { display: none; }
+    .js-story .story-note span.show { display: inline; }
+    .js-story .story-row { opacity: 0.14; transform: translate3d(0, 10px, 0); transition: opacity 0.45s, transform 0.55s cubic-bezier(0.16, 1, 0.3, 1); }
+    .js-story .story-row.on { opacity: 1; transform: none; }
+    .story-note span { display: inline; }
+    .story-verdict span.v-final { }
+    @media (prefers-color-scheme: light) { .story-row .no { color: #be123c; } .story-row .ok { color: #047857; } .story-cta .primary { color: #fff; background: #047857; } .story-card { box-shadow: 0 30px 80px -34px rgba(0, 0, 0, 0.25); } }
+    @media (prefers-reduced-motion: reduce) { .story-row, .story-verdict span, .story-words .w { transition: none !important; } }
   </style>
   <style>
     /* Footer links are standalone targets, keep them at least 24px tall. */
@@ -279,6 +449,9 @@
       if (el) el.innerText = window.__networkCallsCount;
     }
   </script>
+
+  <div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
+  <div class="scroll-progress" aria-hidden="true"></div>
 
   <!-- Top Navbar -->
   <header class="border-b border-dark-800 bg-dark-900/80 backdrop-blur-md sticky top-0 z-40">
@@ -328,7 +501,7 @@
       </nav>
 
       <!-- Live Engine Telemetry Pill & GitHub CTA -->
-      <div class="flex items-center space-x-4">
+      <div class="flex items-center space-x-2 sm:space-x-4">
         <div class="hidden 2xl:flex items-center space-x-3 bg-dark-850 px-3 py-1.5 rounded-full border border-dark-700 text-xs font-mono">
           <div class="flex items-center space-x-1.5">
             <span id="wasm-status-dot" class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping"></span>
@@ -348,10 +521,15 @@
         </div>
 
         <a href="#demo-video" id="watch-demo-btn"
-           class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-brand-500 hover:bg-brand-400 text-black text-xs font-bold whitespace-nowrap transition">
+           class="flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-brand-500 hover:bg-brand-400 text-black text-xs font-bold whitespace-nowrap transition">
           <svg viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
           <span class="sm:hidden">Demo</span><span class="hidden sm:inline">Watch demo</span>
         </a>
+
+        <button type="button" id="top-pro-btn" onclick="track('pro_click'); openProCheckoutModal()"
+                class="flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-black text-xs font-bold whitespace-nowrap shadow-lg shadow-brand-500/20 transition cursor-pointer">
+          <span>Get Pro</span><span class="hidden sm:inline font-mono font-medium">$49/mo</span>
+        </button>
 
         <button onclick="openCommandPalette()" aria-label="Open command palette"
                 class="hidden sm:flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-dark-800 hover:bg-dark-700 border border-dark-700 text-xs text-slate-400 hover:text-slate-200 transition">
@@ -359,8 +537,8 @@
           <span class="font-mono">⌘K</span>
         </button>
 
-        <a href="https://github.com/SharedCode/joltrin" target="_blank" rel="noopener noreferrer"
-           class="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-dark-800 hover:bg-dark-700 border border-dark-700 text-xs font-medium text-slate-200 transition">
+        <a href="https://github.com/SharedCode/joltrin" target="_blank" rel="noopener noreferrer" aria-label="Joltrin on GitHub"
+           class="flex items-center space-x-2 px-2.5 sm:px-3 py-1.5 rounded-lg bg-dark-800 hover:bg-dark-700 border border-dark-700 text-xs font-medium text-slate-200 transition">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
           <span class="hidden sm:inline">GitHub</span>
         </a>
@@ -386,6 +564,7 @@
       <a href="./agents/" class="block px-3 py-2 rounded-lg text-slate-300 hover:text-white hover:bg-dark-800 transition">Agents</a>
       <a href="./docs/" class="block px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-dark-800 transition">Docs</a>
       <a href="#pricing" onclick="closeMobileMenu()" class="block px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-dark-800 transition">Pricing</a>
+      <button type="button" onclick="closeMobileMenu(); track('pro_click'); openProCheckoutModal()" class="w-full text-left block px-3 py-2 rounded-lg text-brand-400 font-semibold hover:bg-dark-800 transition">Get Pro, $49/mo</button>
       <a href="#enterprise" onclick="closeMobileMenu()" class="block px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-dark-800 transition">Enterprise</a>
     </nav>
   </header>
@@ -408,6 +587,51 @@
   </div>
 
   <!-- Main Container -->
+  <!-- Scroll story: the barrier decision sequence, played by scrolling -->
+  <div class="story" id="story">
+    <section class="story-intro" aria-labelledby="story-line">
+      <div>
+        <p class="story-eyebrow">Independent verification</p>
+        <p class="story-words" id="story-line"><span class="w">An</span> <span class="w">agent</span> <span class="w">says</span> <span class="w">it</span> <span class="w">backed</span> <span class="w">up</span> <span class="w">the</span> <span class="w">database.</span> <span class="w">Joltrin</span> <span class="w">checks</span> <span class="w">the</span> <span class="w">record,</span> <span class="w">not</span> <span class="w">the</span> <span class="w">claim.</span></p>
+        <p class="story-hint" id="story-hint">Scroll down to continue <span aria-hidden="true">&darr;</span></p>
+      </div>
+    </section>
+
+    <section class="story-pin" aria-label="How the barrier decides">
+      <div class="story-stage">
+        <div>
+          <p class="story-verdict" aria-live="off">
+            <span class="v-block" data-for="0 1">Blocked.</span>
+            <span class="v-allow" data-for="2 3 4">Allowed.</span>
+          </p>
+          <p class="story-note">
+            <span data-for="0">The agent asks to drop the production database. The recorded trace has no validated backup, so the barrier refuses.</span>
+            <span data-for="1">It tries to validate a backup that was never taken. Refused again, with the missing state named.</span>
+            <span data-for="2">It takes the backup. That step has everything it needs, so it is recorded.</span>
+            <span data-for="3">Now the validation passes, because the backup it depends on exists in the trace.</span>
+            <span data-for="4">The drop is committed. The order was enforced by the barrier, whatever the agent said it had already done.</span>
+          </p>
+        </div>
+        <div class="story-card" role="img" aria-label="Runbook decisions: drop_prod_db blocked, validate_backup blocked, take_backup allowed, validate_backup allowed, drop_prod_db allowed">
+          <p class="hd">// db-maintenance runbook</p>
+          <div class="story-row"><b>drop_prod_db</b><span><b class="no">BLOCKED</b> <span class="why">backup_validated missing</span></span></div>
+          <div class="story-row"><b>validate_backup</b><span><b class="no">BLOCKED</b> <span class="why">backup_taken missing</span></span></div>
+          <div class="story-row"><b>take_backup</b><span><b class="ok">ALLOWED</b></span></div>
+          <div class="story-row"><b>validate_backup</b><span><b class="ok">ALLOWED</b></span></div>
+          <div class="story-row"><b>drop_prod_db</b><span><b class="ok">ALLOWED</b></span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="story-end" aria-labelledby="story-end-h">
+      <h2 id="story-end-h">Check before it <em>commits.</em></h2>
+      <div class="story-cta">
+        <a class="primary" href="./agents/">Open the barrier demo</a>
+        <a class="ghost" href="https://github.com/SharedCode/joltrin#try-it-in-five-minutes" target="_blank" rel="noopener noreferrer">Read the quickstart</a>
+      </div>
+    </section>
+  </div>
+
   <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
     <!-- Hero -->
@@ -415,30 +639,38 @@
       <div class="absolute top-0 right-0 -mt-8 -mr-8 w-72 h-72 bg-brand-500/10 rounded-full blur-3xl pointer-events-none"></div>
       <div class="relative z-10 grid grid-cols-1 gap-8 lg:grid-cols-2 items-center">
         <div class="min-w-0">
-          <p class="text-xs font-mono font-semibold uppercase tracking-wider text-brand-400 mb-4">Open source, MCP and A2A</p>
+          <p class="text-xs font-mono font-semibold uppercase tracking-wider text-brand-400 mb-4">For teams letting AI agents change infrastructure</p>
 
           <h1 class="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-white tracking-tight leading-tight mb-4">
-            Independent verification before
-            <span class="bg-gradient-to-r from-brand-400 via-accent-cyan to-accent-violet bg-clip-text text-transparent">AI agents act</span>.
+            Your AI agent wants to delete production.
+            <span class="bg-gradient-to-r from-brand-400 via-accent-cyan to-accent-violet bg-clip-text text-transparent">Who's stopping it?</span>
           </h1>
 
-          <p class="text-slate-300 text-base sm:text-lg leading-relaxed mb-3">
-            Check an agent's proposed action against recorded workflow state and explicit prerequisites before it commits. When a required step is missing, the agent gets a structured answer that says what to run first, or to stop and ask a person.</p>
+          <p class="text-white font-semibold text-base sm:text-lg leading-relaxed mb-2">
+            Joltrin blocks a risky step, like dropping a database, until the steps before it are recorded, and tells the agent what to do first.</p>
           <p class="text-slate-400 text-sm leading-relaxed mb-6">
-            A claim that something happened is not evidence that it happened. The check is Go code that runs outside the agent's reasoning, with the same result every time for the same trace. The system that performs the action still has to wait for its answer.
+            You put it in front of the one tool you want protected. Your agent asks Joltrin before it acts. Open source and free to try in your browser.
           </p>
 
           <div class="flex flex-wrap items-center gap-3">
             <a href="./agents/"
                class="px-5 py-3 rounded-xl bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 font-bold text-sm text-black shadow-lg shadow-brand-500/20 flex items-center space-x-2 transition">
               <i data-lucide="shield-check" class="w-4 h-4"></i>
-              <span>Try the live barrier</span>
+              <span>Try to make an agent drop a database</span>
             </a>
-            <a href="https://github.com/SharedCode/joltrin#try-it-in-five-minutes" target="_blank" rel="noopener noreferrer"
+            <a href="#demo-video"
                class="px-5 py-3 rounded-xl bg-dark-900 hover:bg-dark-850 border border-dark-700 text-slate-200 hover:text-white font-semibold text-sm flex items-center space-x-2 transition">
-              <i data-lucide="terminal" class="w-4 h-4 text-brand-400"></i>
-              <span>Quickstart on GitHub</span>
+              <i data-lucide="play" class="w-4 h-4 text-brand-400"></i>
+              <span>Watch the short demo</span>
             </a>
+          </div>
+          <div class="mt-5 min-w-0">
+            <p class="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-1.5">Or run it now (Go 1.26.10 or newer)</p>
+            <div class="relative">
+              <pre id="quickstart-cmd" class="rounded-lg bg-dark-950 border border-dark-700 pl-3 pr-16 py-2 font-mono text-xs text-slate-200 overflow-x-auto"><code>go run github.com/sharedcode/joltrin/v5/examples/verify_barrier@latest</code></pre>
+              <button type="button" id="quickstart-copy" onclick="copyQuickstart(this)" class="absolute right-1.5 top-1.5 px-2 py-0.5 rounded-md bg-dark-800 hover:bg-dark-700 border border-dark-700 text-[11px] font-mono text-slate-300 transition cursor-pointer">Copy</button>
+            </div>
+            <p class="text-[11px] text-slate-500 mt-1.5">It checks the recorded trace, not the world. <a href="#limits" class="underline text-brand-400 hover:text-brand-300">What this does not prove</a></p>
           </div>
         </div>
 
@@ -679,7 +911,7 @@
           <span class="text-white font-bold block text-sm">Experience the verification barrier live in your browser:</span>
           <span class="text-slate-400">Click through the exact <code>verify</code> runbook gating MCP and A2A agents. Try dropping a database before taking a backup.</span>
         </div>
-        <a href="./agents/" class="px-4 py-2 rounded-lg bg-accent-violet hover:bg-accent-violet/80 text-white font-mono font-semibold shrink-0 transition flex items-center space-x-1.5">
+        <a href="./agents/" class="px-4 py-2 rounded-lg bg-accent-violet hover:bg-accent-violet/80 text-[#fff] font-mono font-semibold shrink-0 transition flex items-center space-x-1.5">
           <span>Launch Agents Barrier Demo →</span>
         </a>
       </div>
@@ -755,7 +987,7 @@ barrier -&gt; ALLOWED</pre>
             The result names which rule tripped, the state that is missing and the steps that would establish it, so the agent can replan from the block itself.
           </p>
           <p class="text-slate-400 text-sm mt-2 leading-relaxed">
-            In five runs where Claude Opus or Sonnet was allowed to run the other steps, it took the steps the block named and finished, and never repeated a blocked call. Haiku refused the task. That is a small sample, so the prompts, models and transcripts are written up in full.
+            In six runs where Claude Opus or Sonnet was allowed to run the other steps, five took the steps the block named and finished without repeating a blocked call. In the sixth, Claude Code's own safety check stopped a malformed call before it reached the server. Haiku refused the task. That is a small sample, so the prompts, models and transcripts are written up in full.
           </p>
           <a href="https://github.com/SharedCode/joltrin/blob/master/docs/AGENT_BARRIER_TESTS.md#does-the-agent-act-on-the-block-feedback" class="inline-block mt-3 text-sm font-mono text-brand-400 hover:text-brand-300 underline underline-offset-4">Read the agent test results</a>
         </div>
@@ -993,6 +1225,32 @@ Error from server: admission webhook "gate.joltrin.dev" denied the request: step
     </section>
 
     <!-- Proof and limits -->
+    <section id="faq" aria-labelledby="faq-h" class="mb-12 p-6 sm:p-10 rounded-2xl bg-dark-900 border border-dark-800">
+      <h2 id="faq-h" class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight leading-snug mb-6">Questions teams ask before trying it</h2>
+      <div class="space-y-3 text-sm text-slate-400 leading-relaxed max-w-3xl">
+        <details class="p-4 rounded-xl bg-dark-950 border border-dark-800">
+          <summary class="font-bold text-white cursor-pointer">What do I have to build?</summary>
+          <p class="mt-2">You name the risky tool and the steps that must come first, then route the agent's call to that tool through Joltrin. It runs in your own environment as a Go library or as an MCP or A2A server. If the agent can reach the tool another way, Joltrin cannot stop that call.</p>
+        </details>
+        <details class="p-4 rounded-xl bg-dark-950 border border-dark-800">
+          <summary class="font-bold text-white cursor-pointer">Can't the agent just say the backup is done?</summary>
+          <p class="mt-2">If the agent records its own steps, yes. Joltrin checks the recorded steps, not the real world. Steps that matter should be recorded by a tool you trust, such as the result of a backup check, and not by the agent's word.</p>
+        </details>
+        <details class="p-4 rounded-xl bg-dark-950 border border-dark-800">
+          <summary class="font-bold text-white cursor-pointer">How is this different from permissions or approval prompts?</summary>
+          <p class="mt-2">Permissions decide who may call a tool. Approvals ask a person every time. Joltrin decides whether the earlier steps happened, so safe orders go through on their own and risky ones wait. Use them together.</p>
+        </details>
+        <details class="p-4 rounded-xl bg-dark-950 border border-dark-800">
+          <summary class="font-bold text-white cursor-pointer">What does Pro add that the free version does not?</summary>
+          <p class="mt-2">The free version is the barrier, the MCP and A2A servers, and this demo, under the MIT license. Pro is for teams: one shared policy for every agent and a record of each allow and block. Some of that code is in the repository already, and bringing it into your setup is design-partner work today.</p>
+        </details>
+        <details class="p-4 rounded-xl bg-dark-950 border border-dark-800">
+          <summary class="font-bold text-white cursor-pointer">How do I buy, and what happens next?</summary>
+          <p class="mt-2">Press Request Pro in the pricing section and fill in the short form. It then shows an Email Us to Start Pro button that opens your mail app with the details filled in; the request is sent when you send that email. We reply and set it up with you. There is no self-serve checkout yet, and you are not charged by clicking.</p>
+        </details>
+      </div>
+    </section>
+
     <section id="limits" class="mb-12 p-6 sm:p-10 rounded-2xl bg-dark-900 border border-dark-800">
       <div class="max-w-3xl mb-6">
         <h2 class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight leading-snug">What is real, what is simulated, what it does not do.</h2>
@@ -1023,475 +1281,6 @@ Error from server: admission webhook "gate.joltrin.dev" denied the request: step
       </dl>
     </section>
 
-    <!-- Supporting capability: durable agent memory -->
-    <section id="durable-memory" class="mb-12 p-6 sm:p-10 rounded-2xl bg-dark-900 border border-dark-800">
-      <div class="max-w-3xl mb-8">
-        <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-accent-violet/10 border border-accent-violet/30 text-accent-violet text-xs font-mono font-semibold uppercase tracking-wider mb-3">
-          <i data-lucide="brain" class="w-3.5 h-3.5"></i>
-          <span>Supporting capability</span>
-        </div>
-        <h2 class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight leading-snug">
-          Durable state underneath.
-        </h2>
-        <p class="text-slate-400 text-sm sm:text-base mt-2 leading-relaxed">
-          When an agent's process restarts, a network connection drops, or a container gets evicted, whatever it was holding in memory is gone. Joltrin gives it durable state, transactional checkpoints, and a deterministic way to recover.
-        </p>
-      </div>
-
-      <!-- 5 Pillars of Durable Memory -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-        <div class="p-5 rounded-xl bg-dark-950 border border-dark-800 space-y-2">
-          <div class="text-brand-400 font-mono font-bold text-xs uppercase">1. Durable State</div>
-          <h3 class="font-bold text-white text-sm">Survives restarts</h3>
-          <p class="text-xs text-slate-400 leading-relaxed">
-            State is written to local copy-on-write B-trees or to clustered storage, not to a cache that disappears with the process.
-          </p>
-        </div>
-
-        <div class="p-5 rounded-xl bg-dark-950 border border-dark-800 space-y-2">
-          <div class="text-accent-cyan font-mono font-bold text-xs uppercase">2. Checkpoints</div>
-          <h3 class="font-bold text-white text-sm">Atomic checkpoints</h3>
-          <p class="text-xs text-slate-400 leading-relaxed">
-            Record each step atomically. If an agent fails on step 8 of 10, it resumes from the last committed step, not from the start.
-          </p>
-        </div>
-
-        <div class="p-5 rounded-xl bg-dark-950 border border-dark-800 space-y-2">
-          <div class="text-accent-violet font-mono font-bold text-xs uppercase">3. Recovery &amp; Rollback</div>
-          <h3 class="font-bold text-white text-sm">Rollback on failure</h3>
-          <p class="text-xs text-slate-400 leading-relaxed">
-            A transaction that fails before it commits is rolled back, so a half-finished change is not left behind. Commits use two-phase commit.
-          </p>
-        </div>
-
-        <div class="p-5 rounded-xl bg-dark-950 border border-dark-800 space-y-2">
-          <div class="text-amber-400 font-mono font-bold text-xs uppercase">4. Vector Similarity</div>
-          <h3 class="font-bold text-white text-sm">Vector search</h3>
-          <p class="text-xs text-slate-400 leading-relaxed">
-            Recall similar past episodes and facts by cosine distance. The index lives in the storage engine.
-          </p>
-        </div>
-
-        <div class="p-5 rounded-xl bg-dark-950 border border-dark-800 space-y-2 sm:col-span-2 lg:col-span-2">
-          <div class="text-emerald-400 font-mono font-bold text-xs uppercase">5. Persistent Working Context</div>
-          <h3 class="font-bold text-white text-sm">No network hop</h3>
-          <p class="text-xs text-slate-400 leading-relaxed">
-            Runs inside your application binary, or in the browser on OPFS (Origin Private File System), so reads do not cross a network.
-          </p>
-        </div>
-      </div>
-
-    </section>
-
-    <!-- SECTION 8: UNDER THE HOOD (DATABASE & STORAGE ENGINEERING CREDIBILITY) -->
-    <section id="under-the-hood" class="relative mb-12">
-      <!-- WASM loading overlay. It covers only this section, so the rest of the page is usable while the engine loads. -->
-      <div id="wasm-loader-overlay" class="absolute inset-0 z-30 rounded-2xl bg-dark-950/90 backdrop-blur-md transition-opacity duration-500">
-        <div class="sticky top-32 flex flex-col items-center justify-center p-4">
-          <div class="w-16 h-16 relative flex items-center justify-center mb-6">
-            <div class="absolute inset-0 rounded-full border-4 border-brand-500/20"></div>
-            <div class="absolute inset-0 rounded-full border-4 border-brand-500 border-t-transparent animate-spin"></div>
-            <i data-lucide="cpu" class="w-6 h-6 text-brand-400"></i>
-          </div>
-          <h3 class="text-lg font-bold text-white mb-2">Loading the engine</h3>
-          <p class="text-sm text-slate-400 text-center max-w-md mb-4 font-mono">
-            Loading the WebAssembly build. The demos start when it is ready.
-          </p>
-          <div class="w-64 bg-dark-800 h-1.5 rounded-full overflow-hidden">
-            <div class="bg-gradient-to-r from-brand-500 to-accent-cyan h-full w-full animate-pulse"></div>
-          </div>
-        </div>
-      </div>
-      <div class="max-w-3xl mb-6">
-        <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-accent-cyan/10 border border-accent-cyan/30 text-accent-cyan text-xs font-mono font-semibold uppercase tracking-wider mb-2">
-          <i data-lucide="database" class="w-3.5 h-3.5"></i>
-          <span>Core engine</span>
-        </div>
-        <h2 class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-          Under the hood: the storage engine
-        </h2>
-        <p class="text-slate-400 text-xs sm:text-sm mt-1 leading-relaxed">
-          Underneath the agent layer is a storage engine: copy-on-write B-trees, write-ahead logging, two-phase-commit ACID transactions, and Reed-Solomon erasure coding. It compiles to native Go and to WebAssembly, so the demos below run in your browser.
-        </p>
-      </div>
-
-      <!-- Interactive Navigation Tabs -->
-      <div class="flex items-center space-x-2 border-b border-dark-800 pb-3 mb-6 overflow-x-auto">
-        <button onclick="switchTab('tx-tab')" id="btn-tx-tab" class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold flex items-center space-x-2 bg-brand-500/20 text-brand-400 border border-brand-500/30 transition">
-          <i data-lucide="shield-check" class="w-4 h-4"></i>
-          <span>1. ACID Transaction Lab</span>
-        </button>
-        <button onclick="switchTab('vector-tab')" id="btn-vector-tab" class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold flex items-center space-x-2 bg-dark-850 text-slate-400 hover:text-white border border-transparent hover:border-dark-700 transition">
-          <i data-lucide="sparkles" class="w-4 h-4"></i>
-          <span>2. Vector Similarity Search</span>
-        </button>
-        <button onclick="switchTab('bench-tab')" id="btn-bench-tab" class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold flex items-center space-x-2 bg-dark-850 text-slate-400 hover:text-white border border-transparent hover:border-dark-700 transition">
-          <i data-lucide="activity" class="w-4 h-4"></i>
-          <span>3. Stress Benchmark</span>
-        </button>
-        <button onclick="switchTab('btree-tab')" id="btn-btree-tab" class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold flex items-center space-x-2 bg-dark-850 text-slate-400 hover:text-white border border-transparent hover:border-dark-700 transition">
-          <i data-lucide="layers" class="w-4 h-4"></i>
-          <span>4. B-Tree State Inspector</span>
-        </button>
-        <button onclick="switchTab('agent-tab')" id="btn-agent-tab" class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold flex items-center space-x-2 bg-dark-850 text-slate-400 hover:text-white border border-transparent hover:border-dark-700 transition">
-          <i data-lucide="brain-circuit" class="w-4 h-4"></i>
-          <span>5. AI Agent Memory</span>
-        </button>
-      </div>
-
-    <!-- TAB 1: ACID TRANSACTION LAB -->
-    <div id="tx-tab" class="tab-content block space-y-6">
-      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-
-        <!-- Left Controls & Ledger (7 Cols) -->
-        <div class="lg:col-span-7 space-y-6">
-          <div class="bg-dark-900 border border-dark-800 rounded-2xl p-6">
-            <div class="flex items-center justify-between mb-4">
-              <div>
-                <h3 class="text-base font-bold text-white flex items-center space-x-2">
-                  <i data-lucide="credit-card" class="w-4 h-4 text-brand-400"></i>
-                  <span>In-Memory B-Tree Financial Ledger</span>
-                </h3>
-                <p class="text-xs text-slate-400">Real-time balances stored in local B-Tree nodes.</p>
-              </div>
-              <button onclick="refreshLedgerUI()" class="text-xs text-brand-400 hover:text-brand-300 font-mono flex items-center space-x-1">
-                <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
-                <span>Sync View</span>
-              </button>
-            </div>
-
-            <!-- Ledger Accounts Grid -->
-            <div id="ledger-accounts-container" class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
-              <!-- Loaded dynamically via JS -->
-            </div>
-
-            <!-- Transaction Configuration Form -->
-            <div class="border-t border-dark-800 pt-5 space-y-4">
-              <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-400 font-mono">Execute ACID Scenario</h4>
-
-              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label for="tx-from" class="block text-[11px] text-slate-400 font-mono mb-1">Debit From</label>
-                  <select id="tx-from" class="w-full bg-dark-950 border border-dark-700 rounded-lg px-3 py-2 text-xs font-mono text-white focus:border-brand-500 focus:outline-none">
-                    <option value="acc:001">acc:001 (Acme Corp)</option>
-                    <option value="acc:002">acc:002 (Starlight Fund)</option>
-                    <option value="acc:004">acc:004 (Hyperion AI)</option>
-                  </select>
-                </div>
-                <div>
-                  <label for="tx-to" class="block text-[11px] text-slate-400 font-mono mb-1">Credit To</label>
-                  <select id="tx-to" class="w-full bg-dark-950 border border-dark-700 rounded-lg px-3 py-2 text-xs font-mono text-white focus:border-brand-500 focus:outline-none">
-                    <option value="acc:002">acc:002 (Starlight Fund)</option>
-                    <option value="acc:001">acc:001 (Acme Corp)</option>
-                    <option value="acc:003">acc:003 (Nexus Core)</option>
-                  </select>
-                </div>
-                <div>
-                  <label for="tx-amount" class="block text-[11px] text-slate-400 font-mono mb-1">Amount ($ USD)</label>
-                  <input id="tx-amount" type="number" value="250000" step="10000" class="w-full bg-dark-950 border border-dark-700 rounded-lg px-3 py-2 text-xs font-mono text-white focus:border-brand-500 focus:outline-none" />
-                </div>
-              </div>
-
-              <!-- Action Buttons -->
-              <div class="flex flex-wrap gap-3 pt-2">
-                <button onclick="triggerTransaction('transfer', 0)" class="flex-1 min-w-[200px] px-4 py-2.5 rounded-xl bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 font-semibold text-xs text-black shadow-lg shadow-brand-500/20 flex items-center justify-center space-x-2 transition transform active:scale-95">
-                  <i data-lucide="check-circle-2" class="w-4 h-4"></i>
-                  <span>Execute Atomic Transfer (Commit)</span>
-                </button>
-                <button onclick="triggerTransaction('simulate_conflict', 1)" class="px-4 py-2.5 rounded-xl bg-dark-800 hover:bg-amber-950/40 border border-amber-500/40 text-amber-400 hover:text-amber-300 font-semibold text-xs flex items-center justify-center space-x-2 transition transform active:scale-95">
-                  <i data-lucide="alert-triangle" class="w-4 h-4"></i>
-                  <span>Simulate Conflict (Rollback)</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Right Live WAL & Telemetry (5 Cols) -->
-        <div class="lg:col-span-5 space-y-6">
-          <div class="bg-dark-900 border border-dark-800 rounded-2xl p-6 flex flex-col h-full">
-            <div class="flex items-center justify-between mb-3">
-              <div class="flex items-center space-x-2">
-                <div class="w-2.5 h-2.5 rounded-full bg-brand-400 animate-pulse"></div>
-                <h3 class="text-xs font-bold text-white uppercase tracking-wider font-mono">Browser WAL & Execution Log</h3>
-              </div>
-              <span id="tx-latency-badge" class="text-xs px-2 py-0.5 rounded bg-brand-500/10 border border-brand-500/30 text-brand-400 font-mono font-bold">
-                0 µs
-              </span>
-            </div>
-
-            <!-- Terminal Output Window -->
-            <div id="terminal-logs" class="bg-dark-950 rounded-xl p-4 border border-dark-800 font-mono text-[11px] leading-relaxed text-slate-300 h-80 overflow-y-auto terminal-scroll space-y-1.5 flex-grow">
-              <div class="text-slate-500">// Ready to process client-side ACID transactions.</div>
-              <div class="text-slate-500">// Click 'Execute Atomic Transfer' to dispatch transaction to Go WASM kernel.</div>
-            </div>
-
-            <!-- Transaction Guarantee Badges -->
-            <div class="mt-4 pt-3 border-t border-dark-800 grid grid-cols-4 gap-2 text-center">
-              <div class="bg-dark-850 p-2 rounded-lg border border-dark-800">
-                <span class="text-brand-400 font-bold block font-mono text-xs">A</span>
-                <span class="text-[9px] text-slate-400 uppercase">Atomicity</span>
-              </div>
-              <div class="bg-dark-850 p-2 rounded-lg border border-dark-800">
-                <span class="text-brand-400 font-bold block font-mono text-xs">C</span>
-                <span class="text-[9px] text-slate-400 uppercase">Consistency</span>
-              </div>
-              <div class="bg-dark-850 p-2 rounded-lg border border-dark-800">
-                <span class="text-brand-400 font-bold block font-mono text-xs">I</span>
-                <span class="text-[9px] text-slate-400 uppercase">Isolation</span>
-              </div>
-              <div class="bg-dark-850 p-2 rounded-lg border border-dark-800">
-                <span class="text-brand-400 font-bold block font-mono text-xs">D</span>
-                <span class="text-[9px] text-slate-400 uppercase">Durability</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-      </div>
-    </div>
-
-    <!-- TAB 2: VECTOR SIMILARITY SEARCH -->
-    <div id="vector-tab" class="tab-content hidden space-y-6">
-      <div class="bg-dark-900 border border-dark-800 rounded-2xl p-6 sm:p-8">
-        <div class="max-w-2xl mb-6">
-          <div class="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-accent-cyan/10 border border-accent-cyan/30 text-accent-cyan text-xs font-mono mb-2">
-            <i data-lucide="cpu" class="w-3.5 h-3.5"></i>
-            <span>128-Dimensional SIMD Dot-Product in WASM</span>
-          </div>
-          <h2 class="text-2xl font-bold text-white tracking-tight">Embedded Vector Similarity Search</h2>
-          <p class="text-slate-300 text-sm mt-1">
-            Execute cosine similarity searches across high-dimensional vector embeddings stored directly in browser memory. Ideal for client-side AI Copilots, semantic RAG cache, and local memory stores.
-          </p>
-        </div>
-
-        <!-- Search Input Bar -->
-        <div class="flex flex-col sm:flex-row gap-3 mb-6">
-          <div class="relative flex-grow">
-            <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5"></i>
-            <input id="vector-query-input" type="text" aria-label="Semantic query" value="ACID transaction guarantees and B-Tree storage" placeholder="Enter semantic query..."
-                   class="w-full bg-dark-950 border border-dark-700 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white font-medium focus:border-accent-cyan focus:outline-none transition" />
-          </div>
-          <button onclick="triggerVectorSearch()" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-accent-cyan to-blue-500 hover:from-cyan-400 hover:to-blue-400 font-semibold text-xs text-black shadow-lg shadow-cyan-500/20 flex items-center justify-center space-x-2 transition transform active:scale-95">
-            <i data-lucide="sparkles" class="w-4 h-4"></i>
-            <span>Run Vector Search</span>
-          </button>
-        </div>
-
-        <!-- Query Presets -->
-        <div class="flex flex-wrap items-center gap-2 mb-6 text-xs">
-          <span class="text-slate-500 font-mono">Suggested Queries:</span>
-          <button onclick="setVectorQuery('ACID transaction guarantees and B-Tree storage')" class="px-2.5 py-1 rounded-md bg-dark-800 hover:bg-dark-700 text-slate-300 border border-dark-700 transition">Database Engine</button>
-          <button onclick="setVectorQuery('Zero-server client-side WebAssembly execution')" class="px-2.5 py-1 rounded-md bg-dark-800 hover:bg-dark-700 text-slate-300 border border-dark-700 transition">WASM Architecture</button>
-          <button onclick="setVectorQuery('Sub-millisecond financial ledger and escrow settlement')" class="px-2.5 py-1 rounded-md bg-dark-800 hover:bg-dark-700 text-slate-300 border border-dark-700 transition">Fintech Ledger</button>
-          <button onclick="setVectorQuery('High-dimensional cosine similarity and vector embeddings')" class="px-2.5 py-1 rounded-md bg-dark-800 hover:bg-dark-700 text-slate-300 border border-dark-700 transition">AI Embeddings</button>
-        </div>
-
-        <!-- Search Results Grid -->
-        <div id="vector-results-container" class="space-y-3">
-          <!-- Loaded dynamically via JS -->
-        </div>
-      </div>
-    </div>
-
-    <!-- TAB 3: STRESS BENCHMARK -->
-    <div id="bench-tab" class="tab-content hidden space-y-6">
-      <div class="bg-dark-900 border border-dark-800 rounded-2xl p-6 sm:p-8">
-        <div class="max-w-2xl mb-6">
-          <div class="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-accent-violet/10 border border-accent-violet/30 text-accent-violet text-xs font-mono mb-2">
-            <i data-lucide="gauge" class="w-3.5 h-3.5"></i>
-            <span>Local B-Tree Node Allocator Benchmark</span>
-          </div>
-          <h2 class="text-2xl font-bold text-white tracking-tight">Client-Side High-Throughput Benchmark</h2>
-          <p class="text-slate-300 text-sm mt-1">
-            Stress-test the Go B-Tree engine directly on your CPU. Executes thousands of concurrent insertions, node splits, and key queries in raw WebAssembly.
-          </p>
-          <p class="text-sm mt-3">
-            <a href="./btree/" class="text-accent-violet hover:text-purple-300 font-semibold underline underline-offset-2">Play the Joltrin Arena B-tree challenge</a>
-            <span class="text-slate-400"> to guess first, then run four short scenarios and see where the tree speeds up and where it stops.</span>
-          </p>
-        </div>
-
-        <!-- Benchmark Controls -->
-        <div class="flex flex-wrap items-center gap-4 mb-8 bg-dark-950 p-4 rounded-xl border border-dark-800">
-          <div>
-            <span id="bench-ops-label" class="block text-xs font-mono text-slate-400 mb-1">Batch Operations Count</span>
-            <div class="flex items-center space-x-2" role="group" aria-labelledby="bench-ops-label">
-              <button onclick="setBenchOps(2500)" aria-pressed="false" class="bench-op-btn px-3 py-1.5 rounded-lg bg-dark-800 text-slate-300 text-xs font-mono hover:bg-dark-700 transition">2,500</button>
-              <button onclick="setBenchOps(5000)" aria-pressed="true" class="bench-op-btn px-3 py-1.5 rounded-lg bg-accent-violet/20 border border-accent-violet/40 text-accent-violet text-xs font-mono font-bold transition">5,000</button>
-              <button onclick="setBenchOps(15000)" aria-pressed="false" class="bench-op-btn px-3 py-1.5 rounded-lg bg-dark-800 text-slate-300 text-xs font-mono hover:bg-dark-700 transition">15,000</button>
-              <button onclick="setBenchOps(30000)" aria-pressed="false" class="bench-op-btn px-3 py-1.5 rounded-lg bg-dark-800 text-slate-300 text-xs font-mono hover:bg-dark-700 transition">30,000</button>
-            </div>
-          </div>
-          <div class="flex-grow flex justify-end">
-            <button id="run-bench-btn" onclick="triggerBenchmark()" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-accent-violet to-purple-600 hover:from-purple-500 hover:to-purple-400 font-semibold text-xs text-white shadow-lg shadow-purple-500/20 flex items-center space-x-2 transition transform active:scale-95">
-              <i data-lucide="play" class="w-4 h-4"></i>
-              <span>Launch WASM Stress Test</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Benchmark Metrics Cards -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div class="bg-dark-950 border border-dark-800 rounded-xl p-5">
-            <span class="text-xs text-slate-400 font-mono block mb-1">Throughput</span>
-            <div class="flex items-baseline space-x-2">
-              <span id="bench-ops-sec" class="text-3xl font-extrabold text-white font-mono">--</span>
-              <span class="text-xs text-brand-400 font-mono font-semibold">ops/sec</span>
-            </div>
-            <span class="text-[10px] text-slate-500 mt-2 block font-mono">Pure V8 / WASM Execution</span>
-          </div>
-          <div class="bg-dark-950 border border-dark-800 rounded-xl p-5">
-            <span class="text-xs text-slate-400 font-mono block mb-1">Average Latency</span>
-            <div class="flex items-baseline space-x-2">
-              <span id="bench-avg-lat" class="text-3xl font-extrabold text-accent-cyan font-mono">--</span>
-              <span class="text-xs text-slate-400 font-mono">µs / op</span>
-            </div>
-            <span class="text-[10px] text-slate-500 mt-2 block font-mono">0ms Network Overhead</span>
-          </div>
-          <div class="bg-dark-950 border border-dark-800 rounded-xl p-5">
-            <span class="text-xs text-slate-400 font-mono block mb-1">Total Exec Time</span>
-            <div class="flex items-baseline space-x-2">
-              <span id="bench-total-time" class="text-3xl font-extrabold text-accent-violet font-mono">--</span>
-            </div>
-            <span class="text-[10px] text-slate-500 mt-2 block font-mono">End-to-End in Browser</span>
-          </div>
-          <div class="bg-dark-950 border border-dark-800 rounded-xl p-5">
-            <span class="text-xs text-slate-400 font-mono block mb-1">Network Requests</span>
-            <div class="flex items-baseline space-x-2">
-              <span class="text-3xl font-extrabold text-brand-400 font-mono">0</span>
-              <span class="text-xs text-slate-400 font-mono">packets</span>
-            </div>
-            <span class="text-[10px] text-brand-500/80 mt-2 block font-mono">✓ Verified Zero-Server</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- TAB 4: B-TREE STATE INSPECTOR -->
-    <div id="btree-tab" class="tab-content hidden space-y-6">
-      <div class="bg-dark-900 border border-dark-800 rounded-2xl p-6 sm:p-8">
-        <div class="flex items-center justify-between mb-6">
-          <div>
-            <h2 class="text-2xl font-bold text-white tracking-tight">Embedded B-Tree Inspector</h2>
-            <p class="text-slate-300 text-sm mt-1">Live metadata for active node stores and in-memory key/value slots.</p>
-          </div>
-          <button onclick="refreshEngineInfo()" class="px-3 py-1.5 rounded-lg bg-dark-800 hover:bg-dark-700 text-xs font-mono text-slate-300 flex items-center space-x-1.5 border border-dark-700">
-            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
-            <span>Refresh Stats</span>
-          </button>
-        </div>
-
-        <div class="bg-dark-950 rounded-xl border border-dark-800 overflow-hidden font-mono text-xs">
-          <div class="bg-dark-850 px-4 py-3 border-b border-dark-800 font-bold text-slate-300 flex justify-between">
-            <span>ENGINE STATUS & PROPERTIES</span>
-            <span class="text-brand-400">READY</span>
-          </div>
-          <div id="engine-info-table" class="p-4 space-y-2 text-slate-300">
-            <!-- Loaded dynamically via JS -->
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- TAB 5: AI AGENT MEMORY -->
-    <div id="agent-tab" class="tab-content hidden space-y-6">
-      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-
-        <!-- Left Controls & Trace (7 Cols) -->
-        <div class="lg:col-span-7 space-y-6">
-          <div class="bg-dark-900 border border-dark-800 rounded-2xl p-6">
-            <div class="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-accent-violet/10 border border-accent-violet/30 text-accent-violet text-xs font-mono mb-2">
-              <i data-lucide="brain-circuit" class="w-3.5 h-3.5"></i>
-              <span>Durable Checkpoints for AI Agents</span>
-            </div>
-            <h2 class="text-2xl font-bold text-white tracking-tight">Kill the Agent Mid-Task. Watch It Resume.</h2>
-            <p class="text-slate-300 text-sm mt-1 mb-4">
-              Each reasoning step below is written to the B-Tree as a durable, atomic checkpoint the instant it happens. Kill the agent process and the committed steps stay put, no Redis, no separate checkpoint store. A successor agent reads the last checkpoint straight out of the B-Tree and keeps going.
-            </p>
-            <p class="text-[11px] text-slate-500 font-mono mb-4 border border-dark-800 rounded-lg p-2.5 bg-dark-950/60">
-              Note: the reasoning text is a scripted demo sequence, not a live model call. The checkpointing, the kill, and the recovery are real operations against the Joltrin B-Tree engine running in this tab.
-            </p>
-
-            <!-- Visual Checkpoint & Failover Sequence -->
-            <div class="mb-5 p-3.5 bg-dark-950/80 border border-dark-700/60 rounded-xl overflow-x-auto text-xs font-mono">
-              <div class="text-[10px] text-slate-500 uppercase tracking-wider mb-2 font-bold">Execution & Failover Recovery Flow</div>
-              <div class="flex items-center justify-between min-w-[620px] gap-2 py-1 text-[11px]">
-                <span class="px-2 py-1 rounded bg-dark-800 text-slate-300 font-semibold">Agent #1</span>
-                <span class="text-slate-600">→</span>
-                <span class="px-2 py-1 rounded bg-dark-800 text-slate-300">Task Started</span>
-                <span class="text-slate-600">→</span>
-                <span class="px-2 py-1 rounded bg-brand-500/20 text-brand-400 border border-brand-500/40 font-semibold">Checkpoint Written</span>
-                <span class="text-slate-600">→</span>
-                <span class="px-2 py-1 rounded bg-rose-500/20 text-rose-400 border border-rose-500/40 font-semibold">💥 Agent Terminated</span>
-                <span class="text-slate-600">→</span>
-                <span class="px-2 py-1 rounded bg-dark-800 text-slate-300 font-semibold">Agent #2</span>
-                <span class="text-slate-600">→</span>
-                <span class="px-2 py-1 rounded bg-accent-cyan/20 text-accent-cyan border border-accent-cyan/40 font-semibold">Checkpoint Recovered</span>
-                <span class="text-slate-600">→</span>
-                <span class="px-2 py-1 rounded bg-accent-violet/20 text-accent-violet border border-accent-violet/40 font-semibold">Task Resumed</span>
-              </div>
-            </div>
-
-            <div class="flex flex-col sm:flex-row gap-3 mb-4">
-              <input id="agent-prompt-input" type="text" aria-label="Agent task" value="Investigate anomalous latency spike in payment gateway cluster" placeholder="Describe an agent task..."
-                     class="w-full bg-dark-950 border border-dark-700 rounded-xl px-4 py-2.5 text-sm text-white font-medium focus:border-accent-violet focus:outline-none transition" />
-              <button id="agent-start-btn" onclick="agentStartTask()" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-accent-violet to-purple-600 hover:from-purple-500 hover:to-purple-400 font-semibold text-xs text-white shadow-lg shadow-purple-500/20 flex items-center justify-center space-x-2 transition transform active:scale-95 shrink-0">
-                <i data-lucide="play" class="w-4 h-4"></i>
-                <span>Start Agent Task</span>
-              </button>
-            </div>
-
-            <div class="flex flex-wrap items-center gap-3 mb-5 bg-dark-950 p-3 rounded-xl border border-dark-800 text-xs font-mono">
-              <div>Session: <span id="agent-session-id" class="text-white">--</span></div>
-              <div>Active Agent: <span id="agent-current-agent" class="text-white">--</span></div>
-              <div id="agent-state-badge" class="text-[10px] px-2 py-0.5 rounded-full border bg-dark-800 text-slate-400 border-dark-700">IDLE</div>
-              <div id="agent-progress" class="text-slate-400">0 / 0 checkpoints committed</div>
-              <div id="agent-generation" class="text-slate-500">Gen 0</div>
-            </div>
-
-            <div class="flex flex-wrap gap-3 mb-6">
-              <button id="agent-kill-btn" onclick="agentKillTask()" disabled class="px-4 py-2 rounded-xl bg-dark-800 hover:bg-rose-950/40 border border-rose-500/40 text-rose-400 hover:text-rose-300 font-semibold text-xs flex items-center space-x-2 transition disabled:opacity-40 disabled:cursor-not-allowed">
-                <i data-lucide="skull" class="w-4 h-4"></i>
-                <span>Kill Agent Process</span>
-              </button>
-              <button id="agent-resume-btn" onclick="agentResumeTask()" disabled class="px-4 py-2 rounded-xl bg-dark-800 hover:bg-brand-950/40 border border-brand-500/40 text-brand-400 hover:text-brand-300 font-semibold text-xs flex items-center space-x-2 transition disabled:opacity-40 disabled:cursor-not-allowed">
-                <i data-lucide="refresh-cw" class="w-4 h-4"></i>
-                <span>Resume From Checkpoint</span>
-              </button>
-              <button onclick="agentRecallSimilar()" class="px-4 py-2 rounded-xl bg-dark-800 hover:bg-dark-700 border border-dark-700 text-slate-300 font-semibold text-xs flex items-center space-x-2 transition">
-                <i data-lucide="search" class="w-4 h-4"></i>
-                <span>Recall Similar Past Incidents</span>
-              </button>
-            </div>
-
-            <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 font-mono mb-2">Committed Reasoning Trace</h3>
-            <div id="agent-trace-list" class="space-y-2 max-h-64 overflow-y-auto terminal-scroll"></div>
-
-            <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 font-mono mt-6 mb-2">Recalled From Memory</h3>
-            <div id="agent-recall-results" class="space-y-2">
-              <div class="text-xs text-slate-500 font-mono">Run "Recall Similar Past Incidents" to search committed agent memory.</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Right Agent Lifecycle Log (5 Cols) -->
-        <div class="lg:col-span-5 space-y-6">
-          <div class="bg-dark-900 border border-dark-800 rounded-2xl p-6 flex flex-col h-full">
-            <div class="flex items-center space-x-2 mb-3">
-              <div class="w-2.5 h-2.5 rounded-full bg-accent-violet animate-pulse"></div>
-              <h3 class="text-xs font-bold text-white uppercase tracking-wider font-mono">Agent Lifecycle Log</h3>
-            </div>
-            <div id="agent-terminal" class="bg-dark-950 rounded-xl p-4 border border-dark-800 font-mono text-[11px] leading-relaxed text-slate-300 h-96 overflow-y-auto terminal-scroll space-y-1.5 flex-grow">
-              <div class="text-dark-600">// Click "Start Agent Task" to begin a checkpointed reasoning session.</div>
-            </div>
-          </div>
-        </div>
-
-      </div>
-    </div>
-    </section> <!-- /#under-the-hood -->
-
     <!-- Open core and plans -->
     <section id="pricing" class="mt-14 mb-12 pt-8 border-t border-dark-800">
       <div class="text-center max-w-2xl mx-auto mb-8">
@@ -1519,23 +1308,27 @@ Error from server: admission webhook "gate.joltrin.dev" denied the request: step
           </a>
         </div>
 
-        <div class="bg-dark-900 border border-brand-500/40 rounded-2xl p-6 flex flex-col justify-between">
+        <div class="relative bg-dark-900 border border-brand-500/60 ring-1 ring-brand-500/30 rounded-2xl p-6 flex flex-col justify-between shadow-xl shadow-brand-500/10">
           <div>
-            <h3 class="text-xs font-mono font-semibold uppercase tracking-wider text-brand-400 mb-3">Pro</h3>
-            <div class="mb-4"><span class="text-3xl font-extrabold text-white font-mono">$49</span> <span class="text-xs text-slate-500 font-mono">per month, per team</span></div>
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="text-xs font-mono font-semibold uppercase tracking-wider text-brand-400">Pro</h3>
+              <span class="text-[10px] font-mono font-semibold uppercase tracking-wider text-black bg-brand-400 rounded-full px-2 py-0.5">For teams</span>
+            </div>
+            <div class="mb-2"><span class="text-3xl font-extrabold text-white font-mono">$49</span> <span class="text-xs text-slate-500 font-mono">per month, per team</span></div>
+            <p class="text-xs text-slate-300 mb-4">For teams that let agents touch real systems. Write the rules once as policy, and keep a tamper-evident record of every allow and block, so you can answer "who let the agent do that?" in minutes.</p>
             <ul class="space-y-2 text-xs text-slate-300 mb-6">
               <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-brand-400 shrink-0"></i><span>Everything in open source</span></li>
-              <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-brand-400 shrink-0"></i><span>Policy-as-code for the barrier</span></li>
-              <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-brand-400 shrink-0"></i><span>Tamper-evident audit lineage</span></li>
+              <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-brand-400 shrink-0"></i><span>Policy-as-code: one set of rules for every agent</span></li>
+              <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-brand-400 shrink-0"></i><span>Tamper-evident audit lineage, with signed export</span></li>
               <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-brand-400 shrink-0"></i><span>Team workspaces and quotas</span></li>
             </ul>
           </div>
           <div>
-            <button onclick="openProCheckoutModal()"
+            <button onclick="track('pro_click'); openProCheckoutModal()"
                     class="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-black font-bold text-xs shadow-lg shadow-brand-500/20 flex items-center justify-center transition cursor-pointer">
               Request Pro
             </button>
-            <p class="text-[11px] text-slate-500 mt-2 text-center">We confirm by email. Self-serve checkout opens when billing is switched on for this site.</p>
+            <p class="text-[11px] text-slate-500 mt-2 text-center">Pro is design-partner access today. We reply by email and set it up with you. Self-serve checkout is not switched on yet. The policy, record and workspace code exists in the open repository; wiring it into the barrier for your team is the work we do together.</p>
           </div>
         </div>
 
@@ -1777,6 +1570,476 @@ Error from server: admission webhook "gate.joltrin.dev" denied the request: step
       </div>
     </section>
 
+    <!-- Supporting capability: durable agent memory -->
+    <section id="durable-memory" class="mb-12 p-6 sm:p-10 rounded-2xl bg-dark-900 border border-dark-800">
+      <div class="max-w-3xl mb-8">
+        <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-accent-violet/10 border border-accent-violet/30 text-accent-violet text-xs font-mono font-semibold uppercase tracking-wider mb-3">
+          <i data-lucide="brain" class="w-3.5 h-3.5"></i>
+          <span>Supporting capability</span>
+        </div>
+        <h2 class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight leading-snug">
+          Durable state underneath.
+        </h2>
+        <p class="text-slate-400 text-sm sm:text-base mt-2 leading-relaxed">
+          When an agent's process restarts, a network connection drops, or a container gets evicted, whatever it was holding in memory is gone. Joltrin gives it durable state, transactional checkpoints, and a deterministic way to recover.
+        </p>
+      </div>
+
+      <!-- 5 Pillars of Durable Memory -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+        <div class="p-5 rounded-xl bg-dark-950 border border-dark-800 space-y-2">
+          <div class="text-brand-400 font-mono font-bold text-xs uppercase">1. Durable State</div>
+          <h3 class="font-bold text-white text-sm">Survives restarts</h3>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            State is written to local copy-on-write B-trees or to clustered storage, not to a cache that disappears with the process.
+          </p>
+        </div>
+
+        <div class="p-5 rounded-xl bg-dark-950 border border-dark-800 space-y-2">
+          <div class="text-accent-cyan font-mono font-bold text-xs uppercase">2. Checkpoints</div>
+          <h3 class="font-bold text-white text-sm">Atomic checkpoints</h3>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            Record each step atomically. If an agent fails on step 8 of 10, it resumes from the last committed step, not from the start.
+          </p>
+        </div>
+
+        <div class="p-5 rounded-xl bg-dark-950 border border-dark-800 space-y-2">
+          <div class="text-accent-violet font-mono font-bold text-xs uppercase">3. Recovery &amp; Rollback</div>
+          <h3 class="font-bold text-white text-sm">Rollback on failure</h3>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            A transaction that fails before it commits is rolled back, so a half-finished change is not left behind. Commits use two-phase commit.
+          </p>
+        </div>
+
+        <div class="p-5 rounded-xl bg-dark-950 border border-dark-800 space-y-2">
+          <div class="text-amber-400 font-mono font-bold text-xs uppercase">4. Vector Similarity</div>
+          <h3 class="font-bold text-white text-sm">Vector search</h3>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            Recall similar past episodes and facts by cosine distance. The index lives in the storage engine.
+          </p>
+        </div>
+
+        <div class="p-5 rounded-xl bg-dark-950 border border-dark-800 space-y-2 sm:col-span-2 lg:col-span-2">
+          <div class="text-emerald-400 font-mono font-bold text-xs uppercase">5. Persistent Working Context</div>
+          <h3 class="font-bold text-white text-sm">No network hop</h3>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            Runs inside your application binary, or in the browser on OPFS (Origin Private File System), so reads do not cross a network.
+          </p>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- SECTION 8: UNDER THE HOOD (DATABASE & STORAGE ENGINEERING CREDIBILITY) -->
+    <section id="under-the-hood" class="relative mb-12">
+      <!-- WASM loading overlay. It covers only this section, so the rest of the page is usable while the engine loads. -->
+      <div id="wasm-loader-overlay" class="absolute inset-0 z-30 rounded-2xl bg-dark-950/90 backdrop-blur-md transition-opacity duration-500">
+        <div class="sticky top-32 flex flex-col items-center justify-center p-4">
+          <div class="w-16 h-16 relative flex items-center justify-center mb-6">
+            <div class="absolute inset-0 rounded-full border-4 border-brand-500/20"></div>
+            <div class="absolute inset-0 rounded-full border-4 border-brand-500 border-t-transparent animate-spin"></div>
+            <i data-lucide="cpu" class="w-6 h-6 text-brand-400"></i>
+          </div>
+          <h3 class="text-lg font-bold text-white mb-2">Loading the engine</h3>
+          <p class="text-sm text-slate-400 text-center max-w-md mb-4 font-mono">
+            Loading the WebAssembly build. The demos start when it is ready.
+          </p>
+          <div class="w-64 bg-dark-800 h-1.5 rounded-full overflow-hidden">
+            <div class="bg-gradient-to-r from-brand-500 to-accent-cyan h-full w-full animate-pulse"></div>
+          </div>
+        </div>
+      </div>
+      <div class="max-w-3xl mb-6">
+        <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-accent-cyan/10 border border-accent-cyan/30 text-accent-cyan text-xs font-mono font-semibold uppercase tracking-wider mb-2">
+          <i data-lucide="database" class="w-3.5 h-3.5"></i>
+          <span>Core engine</span>
+        </div>
+        <h2 class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+          Under the hood: the storage engine
+        </h2>
+        <p class="text-slate-400 text-xs sm:text-sm mt-1 leading-relaxed">
+          Underneath the agent layer is a storage engine: copy-on-write B-trees, write-ahead logging, two-phase-commit ACID transactions, and Reed-Solomon erasure coding. It compiles to native Go and to WebAssembly, so the demos below run in your browser.
+        </p>
+      </div>
+
+      <!-- Interactive Navigation Tabs -->
+      <div class="flex items-center space-x-2 border-b border-dark-800 pb-3 mb-6 overflow-x-auto">
+        <button onclick="switchTab('tx-tab')" id="btn-tx-tab" class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold flex items-center space-x-2 bg-brand-500/20 text-brand-400 border border-brand-500/30 transition">
+          <i data-lucide="shield-check" class="w-4 h-4"></i>
+          <span>1. ACID Transaction Lab</span>
+        </button>
+        <button onclick="switchTab('vector-tab')" id="btn-vector-tab" class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold flex items-center space-x-2 bg-dark-850 text-slate-400 hover:text-white border border-transparent hover:border-dark-700 transition">
+          <i data-lucide="sparkles" class="w-4 h-4"></i>
+          <span>2. Vector Similarity Search</span>
+        </button>
+        <button onclick="switchTab('bench-tab')" id="btn-bench-tab" class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold flex items-center space-x-2 bg-dark-850 text-slate-400 hover:text-white border border-transparent hover:border-dark-700 transition">
+          <i data-lucide="activity" class="w-4 h-4"></i>
+          <span>3. Stress Benchmark</span>
+        </button>
+        <button onclick="switchTab('btree-tab')" id="btn-btree-tab" class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold flex items-center space-x-2 bg-dark-850 text-slate-400 hover:text-white border border-transparent hover:border-dark-700 transition">
+          <i data-lucide="layers" class="w-4 h-4"></i>
+          <span>4. B-Tree State Inspector</span>
+        </button>
+        <button onclick="switchTab('agent-tab')" id="btn-agent-tab" class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold flex items-center space-x-2 bg-dark-850 text-slate-400 hover:text-white border border-transparent hover:border-dark-700 transition">
+          <i data-lucide="brain-circuit" class="w-4 h-4"></i>
+          <span>5. AI Agent Memory</span>
+        </button>
+      </div>
+
+    <!-- TAB 1: ACID TRANSACTION LAB -->
+    <div id="tx-tab" class="tab-content block space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- Left Controls & Ledger (7 Cols) -->
+        <div class="lg:col-span-7 space-y-6">
+          <div class="bg-dark-900 border border-dark-800 rounded-2xl p-6">
+            <div class="flex items-center justify-between mb-4">
+              <div>
+                <h3 class="text-base font-bold text-white flex items-center space-x-2">
+                  <i data-lucide="credit-card" class="w-4 h-4 text-brand-400"></i>
+                  <span>In-Memory B-Tree Financial Ledger</span>
+                </h3>
+                <p class="text-xs text-slate-400">Real-time balances stored in local B-Tree nodes.</p>
+              </div>
+              <button onclick="refreshLedgerUI()" class="text-xs text-brand-400 hover:text-brand-300 font-mono flex items-center space-x-1">
+                <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                <span>Sync View</span>
+              </button>
+            </div>
+
+            <!-- Ledger Accounts Grid -->
+            <div id="ledger-accounts-container" class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+              <!-- Loaded dynamically via JS -->
+            </div>
+
+            <!-- Transaction Configuration Form -->
+            <div class="border-t border-dark-800 pt-5 space-y-4">
+              <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-400 font-mono">Execute ACID Scenario</h4>
+
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label for="tx-from" class="block text-[11px] text-slate-400 font-mono mb-1">Debit From</label>
+                  <select id="tx-from" class="w-full bg-dark-950 border border-dark-700 rounded-lg px-3 py-2 text-xs font-mono text-white focus:border-brand-500 focus:outline-none">
+                    <option value="acc:001">acc:001 (Acme Corp)</option>
+                    <option value="acc:002">acc:002 (Starlight Fund)</option>
+                    <option value="acc:004">acc:004 (Hyperion AI)</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="tx-to" class="block text-[11px] text-slate-400 font-mono mb-1">Credit To</label>
+                  <select id="tx-to" class="w-full bg-dark-950 border border-dark-700 rounded-lg px-3 py-2 text-xs font-mono text-white focus:border-brand-500 focus:outline-none">
+                    <option value="acc:002">acc:002 (Starlight Fund)</option>
+                    <option value="acc:001">acc:001 (Acme Corp)</option>
+                    <option value="acc:003">acc:003 (Nexus Core)</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="tx-amount" class="block text-[11px] text-slate-400 font-mono mb-1">Amount ($ USD)</label>
+                  <input id="tx-amount" type="number" value="250000" step="10000" class="w-full bg-dark-950 border border-dark-700 rounded-lg px-3 py-2 text-xs font-mono text-white focus:border-brand-500 focus:outline-none" />
+                </div>
+              </div>
+
+              <!-- Action Buttons -->
+              <div class="flex flex-wrap gap-3 pt-2">
+                <button onclick="triggerTransaction('transfer', 0)" class="flex-1 min-w-[200px] px-4 py-2.5 rounded-xl bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 font-semibold text-xs text-black shadow-lg shadow-brand-500/20 flex items-center justify-center space-x-2 transition transform active:scale-95">
+                  <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+                  <span>Execute Atomic Transfer (Commit)</span>
+                </button>
+                <button onclick="triggerTransaction('simulate_conflict', 1)" class="px-4 py-2.5 rounded-xl bg-dark-800 hover:bg-amber-950/40 border border-amber-500/40 text-amber-400 hover:text-amber-300 font-semibold text-xs flex items-center justify-center space-x-2 transition transform active:scale-95">
+                  <i data-lucide="alert-triangle" class="w-4 h-4"></i>
+                  <span>Simulate Conflict (Rollback)</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Live WAL & Telemetry (5 Cols) -->
+        <div class="lg:col-span-5 space-y-6">
+          <div class="bg-dark-900 border border-dark-800 rounded-2xl p-6 flex flex-col h-full">
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center space-x-2">
+                <div class="w-2.5 h-2.5 rounded-full bg-brand-400 animate-pulse"></div>
+                <h3 class="text-xs font-bold text-white uppercase tracking-wider font-mono">Browser WAL & Execution Log</h3>
+              </div>
+              <span id="tx-latency-badge" class="text-xs px-2 py-0.5 rounded bg-brand-500/10 border border-brand-500/30 text-brand-400 font-mono font-bold">
+                0 µs
+              </span>
+            </div>
+
+            <!-- Terminal Output Window -->
+            <div id="terminal-logs" class="bg-dark-950 rounded-xl p-4 border border-dark-800 font-mono text-[11px] leading-relaxed text-slate-300 h-80 overflow-y-auto terminal-scroll space-y-1.5 flex-grow">
+              <div class="text-slate-500">// Ready to process client-side ACID transactions.</div>
+              <div class="text-slate-500">// Click 'Execute Atomic Transfer' to dispatch transaction to Go WASM kernel.</div>
+            </div>
+
+            <!-- Transaction Guarantee Badges -->
+            <div class="mt-4 pt-3 border-t border-dark-800 grid grid-cols-4 gap-2 text-center">
+              <div class="bg-dark-850 p-2 rounded-lg border border-dark-800">
+                <span class="text-brand-400 font-bold block font-mono text-xs">A</span>
+                <span class="text-[9px] text-slate-400 uppercase">Atomicity</span>
+              </div>
+              <div class="bg-dark-850 p-2 rounded-lg border border-dark-800">
+                <span class="text-brand-400 font-bold block font-mono text-xs">C</span>
+                <span class="text-[9px] text-slate-400 uppercase">Consistency</span>
+              </div>
+              <div class="bg-dark-850 p-2 rounded-lg border border-dark-800">
+                <span class="text-brand-400 font-bold block font-mono text-xs">I</span>
+                <span class="text-[9px] text-slate-400 uppercase">Isolation</span>
+              </div>
+              <div class="bg-dark-850 p-2 rounded-lg border border-dark-800">
+                <span class="text-brand-400 font-bold block font-mono text-xs">D</span>
+                <span class="text-[9px] text-slate-400 uppercase">Durability</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- TAB 2: VECTOR SIMILARITY SEARCH -->
+    <div id="vector-tab" class="tab-content hidden space-y-6">
+      <div class="bg-dark-900 border border-dark-800 rounded-2xl p-6 sm:p-8">
+        <div class="max-w-2xl mb-6">
+          <div class="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-accent-cyan/10 border border-accent-cyan/30 text-accent-cyan text-xs font-mono mb-2">
+            <i data-lucide="cpu" class="w-3.5 h-3.5"></i>
+            <span>128-Dimensional Dot-Product in WASM</span>
+          </div>
+          <h2 class="text-2xl font-bold text-white tracking-tight">Embedded Vector Similarity Search</h2>
+          <p class="text-slate-300 text-sm mt-1">
+            Execute cosine similarity searches across high-dimensional vector embeddings stored directly in browser memory. Ideal for client-side AI Copilots, semantic RAG cache, and local memory stores.
+          </p>
+        </div>
+
+        <!-- Search Input Bar -->
+        <div class="flex flex-col sm:flex-row gap-3 mb-6">
+          <div class="relative flex-grow">
+            <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5"></i>
+            <input id="vector-query-input" type="text" aria-label="Semantic query" value="ACID transaction guarantees and B-Tree storage" placeholder="Enter semantic query..."
+                   class="w-full bg-dark-950 border border-dark-700 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white font-medium focus:border-accent-cyan focus:outline-none transition" />
+          </div>
+          <button onclick="triggerVectorSearch()" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-accent-cyan to-blue-500 hover:from-cyan-400 hover:to-blue-400 font-semibold text-xs text-black shadow-lg shadow-cyan-500/20 flex items-center justify-center space-x-2 transition transform active:scale-95">
+            <i data-lucide="sparkles" class="w-4 h-4"></i>
+            <span>Run Vector Search</span>
+          </button>
+        </div>
+
+        <!-- Query Presets -->
+        <div class="flex flex-wrap items-center gap-2 mb-6 text-xs">
+          <span class="text-slate-500 font-mono">Suggested Queries:</span>
+          <button onclick="setVectorQuery('ACID transaction guarantees and B-Tree storage')" class="px-2.5 py-1 rounded-md bg-dark-800 hover:bg-dark-700 text-slate-300 border border-dark-700 transition">Database Engine</button>
+          <button onclick="setVectorQuery('Zero-server client-side WebAssembly execution')" class="px-2.5 py-1 rounded-md bg-dark-800 hover:bg-dark-700 text-slate-300 border border-dark-700 transition">WASM Architecture</button>
+          <button onclick="setVectorQuery('Sub-millisecond financial ledger and escrow settlement')" class="px-2.5 py-1 rounded-md bg-dark-800 hover:bg-dark-700 text-slate-300 border border-dark-700 transition">Fintech Ledger</button>
+          <button onclick="setVectorQuery('High-dimensional cosine similarity and vector embeddings')" class="px-2.5 py-1 rounded-md bg-dark-800 hover:bg-dark-700 text-slate-300 border border-dark-700 transition">AI Embeddings</button>
+        </div>
+
+        <!-- Search Results Grid -->
+        <div id="vector-results-container" class="space-y-3">
+          <!-- Loaded dynamically via JS -->
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: STRESS BENCHMARK -->
+    <div id="bench-tab" class="tab-content hidden space-y-6">
+      <div class="bg-dark-900 border border-dark-800 rounded-2xl p-6 sm:p-8">
+        <div class="max-w-2xl mb-6">
+          <div class="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-accent-violet/10 border border-accent-violet/30 text-accent-violet text-xs font-mono mb-2">
+            <i data-lucide="gauge" class="w-3.5 h-3.5"></i>
+            <span>Local B-Tree Node Allocator Benchmark</span>
+          </div>
+          <h2 class="text-2xl font-bold text-white tracking-tight">Client-Side High-Throughput Benchmark</h2>
+          <p class="text-slate-300 text-sm mt-1">
+            Stress-test the Go B-Tree engine directly on your CPU. Executes thousands of concurrent insertions, node splits, and key queries in raw WebAssembly.
+          </p>
+          <p class="text-sm mt-3">
+            <a href="./btree/" class="text-accent-violet hover:text-purple-300 font-semibold underline underline-offset-2">Play the Joltrin Arena B-tree challenge</a>
+            <span class="text-slate-400"> to guess first, then run four short scenarios and see where the tree speeds up and where it stops.</span>
+          </p>
+        </div>
+
+        <!-- Benchmark Controls -->
+        <div class="flex flex-wrap items-center gap-4 mb-8 bg-dark-950 p-4 rounded-xl border border-dark-800">
+          <div>
+            <span id="bench-ops-label" class="block text-xs font-mono text-slate-400 mb-1">Batch Operations Count</span>
+            <div class="flex items-center space-x-2" role="group" aria-labelledby="bench-ops-label">
+              <button onclick="setBenchOps(2500)" aria-pressed="false" class="bench-op-btn px-3 py-1.5 rounded-lg bg-dark-800 text-slate-300 text-xs font-mono hover:bg-dark-700 transition">2,500</button>
+              <button onclick="setBenchOps(5000)" aria-pressed="true" class="bench-op-btn px-3 py-1.5 rounded-lg bg-accent-violet/20 border border-accent-violet/40 text-accent-violet text-xs font-mono font-bold transition">5,000</button>
+              <button onclick="setBenchOps(15000)" aria-pressed="false" class="bench-op-btn px-3 py-1.5 rounded-lg bg-dark-800 text-slate-300 text-xs font-mono hover:bg-dark-700 transition">15,000</button>
+              <button onclick="setBenchOps(30000)" aria-pressed="false" class="bench-op-btn px-3 py-1.5 rounded-lg bg-dark-800 text-slate-300 text-xs font-mono hover:bg-dark-700 transition">30,000</button>
+            </div>
+          </div>
+          <div class="flex-grow flex justify-end">
+            <button id="run-bench-btn" onclick="triggerBenchmark()" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-accent-violet to-purple-600 hover:from-purple-500 hover:to-purple-400 font-semibold text-xs text-white shadow-lg shadow-purple-500/20 flex items-center space-x-2 transition transform active:scale-95">
+              <i data-lucide="play" class="w-4 h-4"></i>
+              <span>Launch WASM Stress Test</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Benchmark Metrics Cards -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div class="bg-dark-950 border border-dark-800 rounded-xl p-5">
+            <span class="text-xs text-slate-400 font-mono block mb-1">Throughput</span>
+            <div class="flex items-baseline space-x-2">
+              <span id="bench-ops-sec" class="text-3xl font-extrabold text-white font-mono">--</span>
+              <span class="text-xs text-brand-400 font-mono font-semibold">ops/sec</span>
+            </div>
+            <span class="text-[10px] text-slate-500 mt-2 block font-mono">Pure V8 / WASM Execution</span>
+          </div>
+          <div class="bg-dark-950 border border-dark-800 rounded-xl p-5">
+            <span class="text-xs text-slate-400 font-mono block mb-1">Average Latency</span>
+            <div class="flex items-baseline space-x-2">
+              <span id="bench-avg-lat" class="text-3xl font-extrabold text-accent-cyan font-mono">--</span>
+              <span class="text-xs text-slate-400 font-mono">µs / op</span>
+            </div>
+            <span class="text-[10px] text-slate-500 mt-2 block font-mono">0ms Network Overhead</span>
+          </div>
+          <div class="bg-dark-950 border border-dark-800 rounded-xl p-5">
+            <span class="text-xs text-slate-400 font-mono block mb-1">Total Exec Time</span>
+            <div class="flex items-baseline space-x-2">
+              <span id="bench-total-time" class="text-3xl font-extrabold text-accent-violet font-mono">--</span>
+            </div>
+            <span class="text-[10px] text-slate-500 mt-2 block font-mono">End-to-End in Browser</span>
+          </div>
+          <div class="bg-dark-950 border border-dark-800 rounded-xl p-5">
+            <span class="text-xs text-slate-400 font-mono block mb-1">Network Requests</span>
+            <div class="flex items-baseline space-x-2">
+              <span class="text-3xl font-extrabold text-brand-400 font-mono">0</span>
+              <span class="text-xs text-slate-400 font-mono">packets</span>
+            </div>
+            <span class="text-[10px] text-brand-500/80 mt-2 block font-mono">✓ Verified Zero-Server</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 4: B-TREE STATE INSPECTOR -->
+    <div id="btree-tab" class="tab-content hidden space-y-6">
+      <div class="bg-dark-900 border border-dark-800 rounded-2xl p-6 sm:p-8">
+        <div class="flex items-center justify-between mb-6">
+          <div>
+            <h2 class="text-2xl font-bold text-white tracking-tight">Embedded B-Tree Inspector</h2>
+            <p class="text-slate-300 text-sm mt-1">Live metadata for active node stores and in-memory key/value slots.</p>
+          </div>
+          <button onclick="refreshEngineInfo()" class="px-3 py-1.5 rounded-lg bg-dark-800 hover:bg-dark-700 text-xs font-mono text-slate-300 flex items-center space-x-1.5 border border-dark-700">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+            <span>Refresh Stats</span>
+          </button>
+        </div>
+
+        <div class="bg-dark-950 rounded-xl border border-dark-800 overflow-hidden font-mono text-xs">
+          <div class="bg-dark-850 px-4 py-3 border-b border-dark-800 font-bold text-slate-300 flex justify-between">
+            <span>ENGINE STATUS & PROPERTIES</span>
+            <span class="text-brand-400">READY</span>
+          </div>
+          <div id="engine-info-table" class="p-4 space-y-2 text-slate-300">
+            <!-- Loaded dynamically via JS -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 5: AI AGENT MEMORY -->
+    <div id="agent-tab" class="tab-content hidden space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- Left Controls & Trace (7 Cols) -->
+        <div class="lg:col-span-7 space-y-6">
+          <div class="bg-dark-900 border border-dark-800 rounded-2xl p-6">
+            <div class="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-accent-violet/10 border border-accent-violet/30 text-accent-violet text-xs font-mono mb-2">
+              <i data-lucide="brain-circuit" class="w-3.5 h-3.5"></i>
+              <span>Durable Checkpoints for AI Agents</span>
+            </div>
+            <h2 class="text-2xl font-bold text-white tracking-tight">Kill the Agent Mid-Task. Watch It Resume.</h2>
+            <p class="text-slate-300 text-sm mt-1 mb-4">
+              Each reasoning step below is written to the B-Tree as a durable, atomic checkpoint the instant it happens. Kill the agent process and the committed steps stay put, no Redis, no separate checkpoint store. A successor agent reads the last checkpoint straight out of the B-Tree and keeps going.
+            </p>
+            <p class="text-[11px] text-slate-500 font-mono mb-4 border border-dark-800 rounded-lg p-2.5 bg-dark-950/60">
+              Note: the reasoning text is a scripted demo sequence, not a live model call. The checkpointing, the kill, and the recovery are real operations against the Joltrin B-Tree engine running in this tab.
+            </p>
+
+            <!-- Visual Checkpoint & Failover Sequence -->
+            <div class="mb-5 p-3.5 bg-dark-950/80 border border-dark-700/60 rounded-xl overflow-x-auto text-xs font-mono">
+              <div class="text-[10px] text-slate-500 uppercase tracking-wider mb-2 font-bold">Execution & Failover Recovery Flow</div>
+              <div class="flex items-center justify-between min-w-[620px] gap-2 py-1 text-[11px]">
+                <span class="px-2 py-1 rounded bg-dark-800 text-slate-300 font-semibold">Agent #1</span>
+                <span class="text-slate-600">→</span>
+                <span class="px-2 py-1 rounded bg-dark-800 text-slate-300">Task Started</span>
+                <span class="text-slate-600">→</span>
+                <span class="px-2 py-1 rounded bg-brand-500/20 text-brand-400 border border-brand-500/40 font-semibold">Checkpoint Written</span>
+                <span class="text-slate-600">→</span>
+                <span class="px-2 py-1 rounded bg-rose-500/20 text-rose-400 border border-rose-500/40 font-semibold">💥 Agent Terminated</span>
+                <span class="text-slate-600">→</span>
+                <span class="px-2 py-1 rounded bg-dark-800 text-slate-300 font-semibold">Agent #2</span>
+                <span class="text-slate-600">→</span>
+                <span class="px-2 py-1 rounded bg-accent-cyan/20 text-accent-cyan border border-accent-cyan/40 font-semibold">Checkpoint Recovered</span>
+                <span class="text-slate-600">→</span>
+                <span class="px-2 py-1 rounded bg-accent-violet/20 text-accent-violet border border-accent-violet/40 font-semibold">Task Resumed</span>
+              </div>
+            </div>
+
+            <div class="flex flex-col sm:flex-row gap-3 mb-4">
+              <input id="agent-prompt-input" type="text" aria-label="Agent task" value="Investigate anomalous latency spike in payment gateway cluster" placeholder="Describe an agent task..."
+                     class="w-full bg-dark-950 border border-dark-700 rounded-xl px-4 py-2.5 text-sm text-white font-medium focus:border-accent-violet focus:outline-none transition" />
+              <button id="agent-start-btn" onclick="agentStartTask()" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-accent-violet to-purple-600 hover:from-purple-500 hover:to-purple-400 font-semibold text-xs text-white shadow-lg shadow-purple-500/20 flex items-center justify-center space-x-2 transition transform active:scale-95 shrink-0">
+                <i data-lucide="play" class="w-4 h-4"></i>
+                <span>Start Agent Task</span>
+              </button>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-3 mb-5 bg-dark-950 p-3 rounded-xl border border-dark-800 text-xs font-mono">
+              <div>Session: <span id="agent-session-id" class="text-white">--</span></div>
+              <div>Active Agent: <span id="agent-current-agent" class="text-white">--</span></div>
+              <div id="agent-state-badge" class="text-[10px] px-2 py-0.5 rounded-full border bg-dark-800 text-slate-400 border-dark-700">IDLE</div>
+              <div id="agent-progress" class="text-slate-400">0 / 0 checkpoints committed</div>
+              <div id="agent-generation" class="text-slate-500">Gen 0</div>
+            </div>
+
+            <div class="flex flex-wrap gap-3 mb-6">
+              <button id="agent-kill-btn" onclick="agentKillTask()" disabled class="px-4 py-2 rounded-xl bg-dark-800 hover:bg-rose-950/40 border border-rose-500/40 text-rose-400 hover:text-rose-300 font-semibold text-xs flex items-center space-x-2 transition disabled:opacity-40 disabled:cursor-not-allowed">
+                <i data-lucide="skull" class="w-4 h-4"></i>
+                <span>Kill Agent Process</span>
+              </button>
+              <button id="agent-resume-btn" onclick="agentResumeTask()" disabled class="px-4 py-2 rounded-xl bg-dark-800 hover:bg-brand-950/40 border border-brand-500/40 text-brand-400 hover:text-brand-300 font-semibold text-xs flex items-center space-x-2 transition disabled:opacity-40 disabled:cursor-not-allowed">
+                <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                <span>Resume From Checkpoint</span>
+              </button>
+              <button onclick="agentRecallSimilar()" class="px-4 py-2 rounded-xl bg-dark-800 hover:bg-dark-700 border border-dark-700 text-slate-300 font-semibold text-xs flex items-center space-x-2 transition">
+                <i data-lucide="search" class="w-4 h-4"></i>
+                <span>Recall Similar Past Incidents</span>
+              </button>
+            </div>
+
+            <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 font-mono mb-2">Committed Reasoning Trace</h3>
+            <div id="agent-trace-list" class="space-y-2 max-h-64 overflow-y-auto terminal-scroll"></div>
+
+            <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 font-mono mt-6 mb-2">Recalled From Memory</h3>
+            <div id="agent-recall-results" class="space-y-2">
+              <div class="text-xs text-slate-500 font-mono">Run "Recall Similar Past Incidents" to search committed agent memory.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Agent Lifecycle Log (5 Cols) -->
+        <div class="lg:col-span-5 space-y-6">
+          <div class="bg-dark-900 border border-dark-800 rounded-2xl p-6 flex flex-col h-full">
+            <div class="flex items-center space-x-2 mb-3">
+              <div class="w-2.5 h-2.5 rounded-full bg-accent-violet animate-pulse"></div>
+              <h3 class="text-xs font-bold text-white uppercase tracking-wider font-mono">Agent Lifecycle Log</h3>
+            </div>
+            <div id="agent-terminal" class="bg-dark-950 rounded-xl p-4 border border-dark-800 font-mono text-[11px] leading-relaxed text-slate-300 h-96 overflow-y-auto terminal-scroll space-y-1.5 flex-grow">
+              <div class="text-dark-600">// Click "Start Agent Task" to begin a checkpointed reasoning session.</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+    </section> <!-- /#under-the-hood -->
+
+
     <!-- Pro Checkout & Onboarding Modal -->
     <div id="pro-checkout-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
       <div class="bg-dark-900 border border-brand-500/40 rounded-2xl max-w-lg w-full p-6 sm:p-8 shadow-2xl relative max-h-[90vh] overflow-y-auto">
@@ -1947,7 +2210,7 @@ Error from server: admission webhook "gate.joltrin.dev" denied the request: step
             <i data-lucide="alert-circle" class="w-10 h-10 text-rose-400 mx-auto mb-3"></i>
             <h3 class="text-lg font-bold text-white mb-2">WebAssembly Module Not Found</h3>
             <p class="text-xs text-slate-400 mb-4 font-mono">Ensure 'sop.wasm' and 'wasm_exec.js' are compiled in the demo/ directory.</p>
-            <button onclick="location.reload()" class="px-4 py-2 bg-rose-600 hover:bg-rose-500 rounded-lg text-xs font-bold text-white">Retry Boot</button>
+            <button onclick="location.reload()" class="px-4 py-2 bg-rose-600 hover:bg-rose-500 rounded-lg text-xs font-bold text-[#fff]">Retry Boot</button>
           </div>
         `;
         lucide.createIcons();
@@ -2467,6 +2730,7 @@ Error from server: admission webhook "gate.joltrin.dev" denied the request: step
       const cycle = form.elements['billing_cycle'].value;
 
       if (!workspace || !email) return;
+      track('pro_request');
 
       btn.disabled = true;
       btnText.innerText = 'Creating Checkout Session...';
@@ -2576,6 +2840,7 @@ Error from server: admission webhook "gate.joltrin.dev" denied the request: step
         while (log.children.length > 6) log.removeChild(log.firstChild);
       }
       function attempt(step) {
+        if (steps === 0) track('demo_start');
         steps++;
         var need = rules[step];
         if (need && !state[need]) {
@@ -2585,6 +2850,7 @@ Error from server: admission webhook "gate.joltrin.dev" denied the request: step
           state[gives[step]] = true;
           line('text-brand-400', step + '  ALLOWED');
           if (step === 'drop_prod_db') {
+            track('demo_complete');
             line('text-slate-300', blocks === 0 ? 'Done in the right order, with no blocks. Nicely done.' : 'Done. You hit ' + blocks + (blocks === 1 ? ' block' : ' blocks') + ' on the way, which is the barrier doing its job.');
           }
         }
@@ -2596,6 +2862,93 @@ Error from server: admission webhook "gate.joltrin.dev" denied the request: step
         var step = b.getAttribute('data-step'); if (step) attempt(step);
       });
       reset();
+    })();
+  </script>
+  <script>
+    // Scroll motion: section reveals, hero depth, progress bar. Skipped when the user asks for less motion.
+    (function () {
+      var calm = window.matchMedia('(prefers-reduced-motion: reduce)');
+      if (calm.matches || !('IntersectionObserver' in window)) return;
+      document.documentElement.classList.add('js');
+
+      var targets = document.querySelectorAll('main > section, main > div');
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+          if (!e.isIntersecting) return;
+          e.target.classList.add('in');
+          io.unobserve(e.target);
+        });
+      }, { threshold: 0.06, rootMargin: '0px 0px -8% 0px' });
+      targets.forEach(function (el, i) {
+        if (i === 0) return; // the hero moves with scroll instead
+        el.classList.add('reveal');
+        io.observe(el);
+      });
+
+      // Card grids cascade in instead of landing together.
+      document.querySelectorAll('#live-experiences > *').forEach(function (card, i) {
+        card.classList.add('tilt-card');
+        card.style.setProperty('--reveal-delay', (i * 90) + 'ms');
+      });
+
+      var hero = document.querySelector('main > section');
+      var bar = document.querySelector('.scroll-progress');
+      var ticking = false;
+      function frame() {
+        ticking = false;
+        var y = window.scrollY;
+        var max = document.documentElement.scrollHeight - window.innerHeight;
+        if (bar && max > 0) bar.style.transform = 'scaleX(' + Math.min(1, y / max) + ')';
+        if (hero) {
+          // Fade by how far the hero has scrolled past the top, not by page scroll, so content above it does not dim it.
+          var p = Math.min(1, Math.max(0, -hero.parentElement.getBoundingClientRect().top / (hero.offsetHeight * 0.9)));
+          hero.classList.add('hero-parallax');
+          hero.style.transform = 'translate3d(0,' + (p * 40) + 'px,0) scale(' + (1 - p * 0.04) + ')';
+          hero.style.opacity = String(1 - p * 0.55);
+        }
+      }
+      window.addEventListener('scroll', function () {
+        if (!ticking) { ticking = true; requestAnimationFrame(frame); }
+      }, { passive: true });
+      frame();
+    })();
+  </script>
+  <script>
+    // Scroll story: words light up, then the pinned stage steps through the five decisions as you scroll.
+    (function () {
+      var story = document.getElementById('story');
+      if (!story || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      document.documentElement.classList.add('js-story');
+      var words = story.querySelectorAll('.story-words .w');
+      var intro = story.querySelector('.story-intro');
+      var pin = story.querySelector('.story-pin');
+      var rows = story.querySelectorAll('.story-row');
+      var tagged = story.querySelectorAll('[data-for]');
+      var hint = document.getElementById('story-hint');
+      var step = -1, ticking = false;
+      function frame() {
+        ticking = false;
+        if (hint) hint.classList.toggle('gone', window.scrollY > 40);
+        var vh = window.innerHeight;
+        // Words: lit across the pinned intro track.
+        var r = intro.getBoundingClientRect();
+        var p = Math.min(1, Math.max(0, (-r.top - vh * 0.1) / (r.height - vh * 1.4)));
+        var lit = Math.round(p * words.length);
+        words.forEach(function (w, i) { w.classList.toggle('lit', i < lit); });
+        // Stage: five steps across the pinned track.
+        var pr = pin.getBoundingClientRect();
+        var t = Math.min(0.9999, Math.max(0, -pr.top / (pr.height - vh)));
+        var n = pr.top > vh * 0.4 ? -1 : Math.floor(t * 5);
+        if (n === step) return;
+        step = n;
+        rows.forEach(function (row, i) { row.classList.toggle('on', i <= n); });
+        tagged.forEach(function (el) {
+          el.classList.toggle('show', el.dataset.for.split(' ').indexOf(String(Math.max(n, 0))) !== -1);
+        });
+      }
+      window.addEventListener('scroll', function () { if (!ticking) { ticking = true; requestAnimationFrame(frame); } }, { passive: true });
+      window.addEventListener('resize', frame);
+      frame();
     })();
   </script>
 </body>

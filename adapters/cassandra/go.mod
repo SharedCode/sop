@@ -1,6 +1,6 @@
 module github.com/sharedcode/joltrin/adapters/cassandra
 
-go 1.26.9
+go 1.26.10
 
 require (
 	github.com/gocql/gocql v1.7.0

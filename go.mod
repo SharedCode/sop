@@ -1,6 +1,6 @@
 module github.com/sharedcode/joltrin/v5
 
-go 1.26.9
+go 1.26.10
 
 require (
 	github.com/a2aproject/a2a-go v0.3.15
@@ -8,7 +8,7 @@ require (
 	github.com/google/cel-go v0.30.0
 	github.com/google/uuid v1.6.0
 	github.com/klauspost/reedsolomon v1.14.2
-	github.com/mark3labs/mcp-go v1.1.1
+	github.com/mark3labs/mcp-go v1.2.1
 )
 
 require (
@@ -21,21 +21,22 @@ require (
 	github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed // indirect
 	github.com/kelindar/iostream v1.4.0 // indirect
 	github.com/kelindar/search v0.4.1 // indirect
-	github.com/klauspost/compress v1.20.0 // indirect
-	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
+	github.com/klauspost/compress v1.20.1 // indirect
+	github.com/klauspost/cpuid/v2 v2.4.0 // indirect
+	github.com/nats-io/nats-server/v2 v2.15.1 // indirect
 	github.com/nats-io/nkeys v0.4.16 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
-	github.com/redis/go-redis/v9 v9.22.0 // indirect
+	github.com/redis/go-redis/v9 v9.23.0 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	github.com/spf13/cast v1.7.1 // indirect
-	github.com/stretchr/testify v1.12.1 // indirect
+	github.com/stretchr/objx v0.5.3 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
-	go.uber.org/atomic v1.11.0 // indirect
+	go.uber.org/atomic v1.12.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f // indirect
 	golang.org/x/net v0.60.0 // indirect
-	golang.org/x/sys v0.48.0 // indirect
-	golang.org/x/text v0.42.0 // indirect
+	golang.org/x/sys v0.49.0 // indirect
+	golang.org/x/text v0.43.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 	google.golang.org/grpc v1.83.2 // indirect
@@ -56,6 +57,6 @@ require (
 	github.com/sharedcode/joltrin/infs v0.1.0
 	github.com/sharedcode/joltrin/jsondb v0.1.0
 	github.com/sharedcode/joltrin/search v0.1.0
-	golang.org/x/crypto v0.57.0
+	golang.org/x/crypto v0.58.0
 	golang.org/x/sync v0.24.0
 )

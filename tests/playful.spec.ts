@@ -98,3 +98,21 @@ test.describe('Docs path chooser', () => {
     expect(overflow).toBeLessThanOrEqual(0);
   });
 });
+
+test.describe('Agents page Pro link', () => {
+  test('the Pro link records a pro_click event and goes to pricing', async ({ page }) => {
+    await page.route('**/plausible.io/**', (route) => route.abort());
+    await page.addInitScript(() => {
+      (window as any).__events = [];
+      (window as any).plausible = (name: string) => (window as any).__events.push(name);
+    });
+    await page.goto('/agents/', { waitUntil: 'domcontentloaded' });
+    const link = page.getByRole('link', { name: /explore pro/i });
+    await link.scrollIntoViewIfNeeded();
+    await expect(link).toHaveAttribute('href', /#pricing$/);
+    // Stop the navigation so the event list can be read on this page.
+    await link.evaluate((el) => el.addEventListener('click', (e) => e.preventDefault()));
+    await link.click();
+    expect(await page.evaluate(() => (window as any).__events)).toContain('pro_click');
+  });
+});

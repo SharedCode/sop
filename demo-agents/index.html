@@ -34,6 +34,18 @@
   <script>window.lucide = { createIcons: function () {} };</script>
   <script src="https://unpkg.com/lucide@1.52.0/dist/umd/lucide.min.js" integrity="sha384-SSRIJfpvnhji4rCcULgpNXRJjQ9P/odU9OaWxSumsZiokvJ7zAu4PGQVWyWxTG3u" crossorigin="anonymous" defer></script>
 
+  <!-- Privacy-light analytics (no cookies, no personal data). -->
+  <script defer data-domain="joltrinhq.com" src="https://plausible.io/js/script.js"></script>
+  <script>
+    window.plausible = window.plausible || function () { (window.plausible.q = window.plausible.q || []).push(arguments); };
+    function track(name) { try { window.plausible(name); } catch (e) {} }
+    document.addEventListener('click', function (e) {
+      var a = e.target.closest && e.target.closest('a[href]'); if (!a) return;
+      var h = a.getAttribute('href') || '';
+      if (/\/docs\/|README|#try-it-in-five-minutes/.test(h)) track('docs_click');
+      else if (/^https:\/\/github\.com\//.test(h)) track('github_click');
+    });
+  </script>
   <script src="wasm_exec.js"></script>
 
   <!--
@@ -187,7 +199,7 @@
     <div class="w-full max-w-lg bg-dark-900 border border-dark-700 rounded-2xl shadow-2xl overflow-hidden">
       <div class="flex items-center px-4 border-b border-dark-800">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-slate-500 shrink-0"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-        <input id="cmdk-input" type="text" placeholder="Jump to a section or page..."
+        <input id="cmdk-input" type="text" aria-label="Jump to a section or page" placeholder="Jump to a section or page..."
                class="w-full bg-transparent px-3 py-3.5 text-sm text-white placeholder-slate-500 focus:outline-none font-mono"
                oninput="cmdkFilter(this.value)" onkeydown="cmdkKeydown(event)" autocomplete="off" />
         <kbd class="text-[10px] text-slate-500 border border-dark-700 rounded px-1.5 py-0.5 font-mono shrink-0">ESC</kbd>
@@ -491,11 +503,11 @@ curl localhost:8087/.well-known/agent-card.json</pre>
             Want this on your own agents?
           </h2>
           <p class="text-slate-400 text-xs sm:text-sm mt-2">
-            The barrier is open source. Pro adds team governance, and Enterprise adds Okta or Entra ID sign-in and custom policy rules. Tell us what you are building and we will follow up.
+            The barrier is open source and stays free. Pro is for teams that need one shared policy for every agent and a record of each allow and block. Enterprise adds Okta or Entra ID sign-in and custom policy rules. Tell us what you are building and we will follow up.
           </p>
 
           <div class="flex flex-wrap items-center justify-center gap-3 mt-4">
-            <a href="../#pricing" class="px-4 py-2 rounded-xl bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 font-bold text-xs text-black shadow-lg shadow-brand-500/20 transition">
+            <a href="../#pricing" onclick="track('pro_click')" class="px-4 py-2 rounded-xl bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 font-bold text-xs text-black shadow-lg shadow-brand-500/20 transition">
               Explore Pro ($49/mo)
             </a>
             <button type="button" onclick="document.getElementById('inq-tier-agents').value='enterprise'; document.getElementById('inq-name-agents').focus();"
@@ -771,6 +783,7 @@ curl localhost:8087/.well-known/agent-card.json</pre>
 
     function attemptStep(id) {
       if (!ready) return;
+      if (!window.__demoStarted) { window.__demoStarted = true; track('demo_start'); }
       const res = JSON.parse(sopAgentsExecuteStep(id));
       if (res.blocked) {
         log(`<span class="text-rose-400">→ execute_step(${id}) ... BLOCKED</span>`);
@@ -782,6 +795,7 @@ curl localhost:8087/.well-known/agent-card.json</pre>
         }
       } else {
         log(`<span class="text-brand-400">→ execute_step(${id}) ... committed</span>`);
+        if (id === 'drop_prod_db') track('demo_complete');
       }
       renderSteps(res.trace);
       afterStep(id, res);

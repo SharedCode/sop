@@ -1,12 +1,17 @@
 package nats
 
 import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/sharedcode/joltrin/v5/verify"
 )
@@ -80,6 +85,10 @@ type VerifyBridge struct {
 	// simply drops a publish failure, exactly like fire-and-forget metrics
 	// or logging, rather than letting it surface as a barrier error.
 	onPublishError func(error)
+
+	// js is set only by WithJetStream. When nil, publish uses core NATS
+	// exactly as before.
+	js jetstream.JetStream
 }
 
 // NewVerifyBridge returns a VerifyBridge that runs barrier checks against
@@ -113,7 +122,7 @@ func (b *VerifyBridge) Subject() string {
 // BarrierDecision, and returns wf.CheckSafety's exact result.
 func (b *VerifyBridge) CheckSafety(trace *verify.Trace, next verify.StepID) error {
 	err := b.wf.CheckSafety(trace, next)
-	b.publish(next, false, err)
+	b.publish(next, false, "", err)
 	return err
 }
 
@@ -121,7 +130,7 @@ func (b *VerifyBridge) CheckSafety(trace *verify.Trace, next verify.StepID) erro
 // resulting BarrierDecision, and returns wf.CheckAndCommit's exact result.
 func (b *VerifyBridge) CheckAndCommit(trace *verify.Trace, next verify.StepID) error {
 	err := b.wf.CheckAndCommit(trace, next)
-	b.publish(next, false, err)
+	b.publish(next, false, "", err)
 	return err
 }
 
@@ -131,11 +140,11 @@ func (b *VerifyBridge) CheckAndCommit(trace *verify.Trace, next verify.StepID) e
 // returns wf.CheckAndCommitIdempotent's exact result.
 func (b *VerifyBridge) CheckAndCommitIdempotent(trace *verify.Trace, next verify.StepID, idempotencyKey string) (replayed bool, err error) {
 	replayed, err = b.wf.CheckAndCommitIdempotent(trace, next, idempotencyKey)
-	b.publish(next, replayed, err)
+	b.publish(next, replayed, idempotencyKey, err)
 	return replayed, err
 }
 
-func (b *VerifyBridge) publish(step verify.StepID, replayed bool, err error) {
+func (b *VerifyBridge) publish(step verify.StepID, replayed bool, idempotencyKey string, err error) {
 	ev := BarrierDecision{
 		Time:     time.Now().UTC(),
 		Workflow: b.workflow,
@@ -164,7 +173,176 @@ func (b *VerifyBridge) publish(step verify.StepID, replayed bool, err error) {
 		return
 	}
 
+	if b.js != nil {
+		b.publishJetStream(data, step, idempotencyKey)
+		return
+	}
+
 	if err := b.nc.Publish(b.subject, data); err != nil && b.onPublishError != nil {
 		b.onPublishError(fmt.Errorf("nats: publish barrier decision: %w", err))
 	}
+}
+
+// DefaultStream is the JetStream stream WithJetStream uses when
+// JetStreamOptions.Stream is empty. It captures every subject a
+// VerifyBridge publishes to, whatever the workflow name.
+const DefaultStream = "JOLTRIN_VERIFY"
+
+// defaultStreamSubjects is the subject filter DefaultStream is created with.
+const defaultStreamSubjects = "joltrin.verify.>"
+
+// JetStreamOptions configures the stream WithJetStream creates or checks.
+// The zero value is valid.
+type JetStreamOptions struct {
+	// Stream is the stream name. Empty means DefaultStream.
+	Stream string
+	// Replicas is the replica count used only when the stream is created.
+	// Zero means 1.
+	Replicas int
+	// MaxAge, if set, is how long the stream keeps a decision. Used only
+	// when the stream is created. Zero keeps decisions until removed.
+	MaxAge time.Duration
+	// Duplicates is the window in which a repeated Nats-Msg-Id is stored
+	// once. Used only when the stream is created. Zero means the server
+	// default (two minutes).
+	Duplicates time.Duration
+}
+
+// WithJetStream makes the bridge publish each BarrierDecision to a
+// JetStream stream instead of plain NATS, so decisions are stored and a
+// consumer that was offline can read them later (see SubscribeJetStream).
+// It returns the bridge for chaining.
+//
+// The stream is created if it does not exist. If it exists, it is checked
+// to capture the bridge's subject and is otherwise left untouched; a
+// mismatch is an error rather than a silent change to someone else's
+// stream.
+//
+// Publishing stays off the barrier's path. The decision is made first and
+// returned unchanged, and the publish is asynchronous: a failure, including
+// a missing stream or a lost acknowledgement, is reported through
+// OnPublishError and never to the caller of CheckSafety, CheckAndCommit, or
+// CheckAndCommitIdempotent. Call Flush before shutdown to wait for pending
+// acknowledgements.
+//
+// CheckAndCommitIdempotent publishes with a Nats-Msg-Id built from the
+// workflow, step, and idempotency key, so a retry is stored once inside the
+// stream's duplicate window. CheckSafety and CheckAndCommit have no
+// caller-supplied identity, so their decisions are published without an ID
+// and are not de-duplicated.
+func (b *VerifyBridge) WithJetStream(ctx context.Context, opts JetStreamOptions) (*VerifyBridge, error) {
+	js, err := jetstream.New(b.nc, jetstream.WithPublishAsyncErrHandler(func(_ jetstream.JetStream, _ *nats.Msg, err error) {
+		if b.onPublishError != nil {
+			b.onPublishError(fmt.Errorf("nats: jetstream publish barrier decision: %w", err))
+		}
+	}))
+	if err != nil {
+		return nil, fmt.Errorf("nats: open jetstream: %w", err)
+	}
+
+	name := opts.Stream
+	if name == "" {
+		name = DefaultStream
+	}
+
+	stream, err := js.Stream(ctx, name)
+	switch {
+	case errors.Is(err, jetstream.ErrStreamNotFound):
+		replicas := opts.Replicas
+		if replicas == 0 {
+			replicas = 1
+		}
+		// The default stream is shared by every bridge, so it captures the
+		// whole joltrin.verify tree. A stream with a custom name holds only
+		// this bridge's subject, so it cannot overlap one it does not own.
+		subjects := []string{defaultStreamSubjects}
+		if name != DefaultStream {
+			subjects = []string{b.subject}
+		}
+		if _, err := js.CreateStream(ctx, jetstream.StreamConfig{
+			Name:       name,
+			Subjects:   subjects,
+			Replicas:   replicas,
+			MaxAge:     opts.MaxAge,
+			Duplicates: opts.Duplicates,
+		}); err != nil {
+			return nil, fmt.Errorf("nats: create stream %q: %w", name, err)
+		}
+	case err != nil:
+		return nil, fmt.Errorf("nats: look up stream %q: %w", name, err)
+	default:
+		if !subjectCovered(stream.CachedInfo().Config.Subjects, b.subject) {
+			return nil, fmt.Errorf("nats: stream %q does not capture subject %q", name, b.subject)
+		}
+	}
+
+	b.js = js
+	return b, nil
+}
+
+// Flush waits until every asynchronous JetStream publish has been
+// acknowledged or has failed, or ctx is done. It does nothing for a bridge
+// without WithJetStream.
+func (b *VerifyBridge) Flush(ctx context.Context) error {
+	if b.js == nil {
+		return nil
+	}
+	select {
+	case <-b.js.PublishAsyncComplete():
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (b *VerifyBridge) publishJetStream(data []byte, step verify.StepID, idempotencyKey string) {
+	var opts []jetstream.PublishOpt
+	if idempotencyKey != "" {
+		opts = append(opts, jetstream.WithMsgID(messageID(b.workflow, step, idempotencyKey)))
+	}
+	if _, err := b.js.PublishMsgAsync(&nats.Msg{Subject: b.subject, Data: data}, opts...); err != nil && b.onPublishError != nil {
+		b.onPublishError(fmt.Errorf("nats: jetstream publish barrier decision: %w", err))
+	}
+}
+
+// messageID returns the Nats-Msg-Id for an idempotent decision: a SHA-256 of
+// the workflow, step, and idempotency key, each length-prefixed so no choice
+// of values can make two different triples produce the same input. The step
+// is part of it because verify refuses to reuse a key for a different step;
+// without the step, that refusal would share an ID with the original
+// decision and be dropped as a duplicate.
+func messageID(workflow string, step verify.StepID, key string) string {
+	h := sha256.New()
+	for _, part := range []string{workflow, string(step), key} {
+		fmt.Fprintf(h, "%d:%s", len(part), part)
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// subjectCovered reports whether subject matches any of the stream subject
+// patterns, using NATS wildcards: "*" for one token and a trailing ">" for
+// one or more.
+func subjectCovered(patterns []string, subject string) bool {
+	subjTokens := strings.Split(subject, ".")
+	for _, p := range patterns {
+		pt := strings.Split(p, ".")
+		match := true
+		for i, tok := range pt {
+			if tok == ">" {
+				match = i < len(subjTokens)
+				break
+			}
+			if i >= len(subjTokens) || (tok != "*" && tok != subjTokens[i]) {
+				match = false
+				break
+			}
+			if i == len(pt)-1 && len(subjTokens) != len(pt) {
+				match = false
+			}
+		}
+		if match {
+			return true
+		}
+	}
+	return false
 }

@@ -1,0 +1,29 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: verify-joltrin-image
+spec:
+  validationFailureAction: Enforce
+  webhookTimeoutSeconds: 30
+  rules:
+    - name: signed-by-publish-image
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - joltrin-demo
+      verifyImages:
+        - imageReferences:
+            - ghcr.io/sharedcode/joltrin*
+          mutateDigest: true
+          verifyDigest: true
+          required: true
+          attestors:
+            - entries:
+                - keyless:
+                    issuer: https://token.actions.githubusercontent.com
+                    subject: https://github.com/SharedCode/joltrin/.github/workflows/publish-image.yml@refs/heads/master
+                    rekor:
+                      url: https://rekor.sigstore.dev

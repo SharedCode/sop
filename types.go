@@ -15,27 +15,25 @@ func InferType(v any) (string, bool) {
 	}
 
 	// Handle sop.UUID and uuid.UUID explicitly
-	switch v.(type) {
+	switch x := v.(type) {
 	case UUID, uuid.UUID:
 		return "uuid", false
 	case time.Time:
 		return "time", false
 	case string:
-		s := v.(string)
-		if _, err := ParseUUID(s); err == nil {
+		if _, err := ParseUUID(x); err == nil {
 			return "uuid", false
 		}
 		return "string", false
 	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, uintptr:
 		return "int", false
-	case float32, float64:
+	case float64:
 		// Handle JSON number (float64) which might be int
-		if f, ok := v.(float64); ok {
-			if float64(int64(f)) == f {
-				return "int", false
-			}
-			return "float64", false
+		if float64(int64(x)) == x {
+			return "int", false
 		}
+		return "float64", false
+	case float32:
 		return "float64", false
 	case bool:
 		return "bool", false
