@@ -10,11 +10,10 @@ test.describe('Homepage', () => {
   test('hero states the product and offers one primary action', async ({ page }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     const h1 = page.getByRole('heading', { level: 1 });
-    await expect(h1).toContainText(/independent/i);
-    await expect(h1).toContainText(/verification before/i);
-    await expect(h1).toContainText(/AI agents act/i);
-    await expect(page.getByRole('link', { name: /try the live barrier/i })).toHaveAttribute('href', /agents/);
-    await expect(page.getByRole('link', { name: /quickstart on github/i })).toHaveAttribute('href', /joltrin#try-it-in-five-minutes/);
+    await expect(h1).toContainText(/delete production/i);
+    await expect(h1).toContainText(/who.s stopping it/i);
+    await expect(page.getByRole('link', { name: /try to make an agent drop a database/i })).toHaveAttribute('href', /agents/);
+    await expect(page.getByRole('link', { name: /watch the short demo/i })).toHaveAttribute('href', '#demo-video');
     // The hero text must sit inside the viewport, not be clipped by an overflowing child.
     const fits = await page.evaluate(() => {
       const r = document.querySelector('h1')!.getBoundingClientRect();
@@ -337,5 +336,13 @@ test.describe('Homepage', () => {
     await expect(btn).toHaveText('Copied');
     expect(await page.evaluate(() => (window as any).__events)).toContain('copy_quickstart');
     expect(await page.evaluate(() => (window as any).__copied)).toBe('go run github.com/sharedcode/joltrin/v5/examples/verify_barrier@latest');
+  });
+  test('hero names the problem and the FAQ answers how to buy without promising checkout', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('heading', { level: 1 })).toContainText(/delete production/i);
+    await expect(page.locator('#faq details')).toHaveCount(5);
+    const buy = page.locator('#faq details').last();
+    await expect(buy).toContainText('no self-serve checkout yet');
+    await expect(buy).toContainText('not charged');
   });
 });
