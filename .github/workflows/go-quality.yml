@@ -1,0 +1,45 @@
+name: Go quality gates
+
+on:
+  pull_request:
+  push:
+    branches: [ master, main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: go-quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Catches data races, coverage regressions and static-analysis findings in
+  # the core engine on the PR, before merge. The matrix legs in ci.yml run
+  # the same tests without -race; this job adds the checks they don't.
+  quality:
+    name: Go quality (race + coverage + staticcheck)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l $(git ls-files '*.go' | grep -v '^node_modules/'))
+          if [ -n "$unformatted" ]; then
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Race detector on core packages
+        run: go test -race -count=1 -timeout 20m . ./btree ./inmemory ./common ./cache ./logsafe
+
+      - name: Coverage floors
+        run: scripts/go-coverage-gate.sh
+
+      - name: staticcheck (root and logsafe)
+        run: go run honnef.co/go/tools/cmd/staticcheck@v0.7.0 -tests=false . ./logsafe

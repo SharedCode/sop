@@ -60,7 +60,7 @@ jobs:
     outputs:
       acr-login-server: ${{ steps.deploy.outputs.acrLoginServer }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Azure login (OIDC, no stored secret)
         uses: azure/login@v3
@@ -101,7 +101,7 @@ jobs:
     outputs:
       image-tag: ${{ steps.tag.outputs.image-tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Compute image tag
         id: tag

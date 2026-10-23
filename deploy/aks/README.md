@@ -10,7 +10,8 @@ Git holds the desired state:
 
 - `k8s/base` and `k8s/overlays/demo`: a one-replica StatefulSet on a 1Gi volume, a Service, and the image tag.
 - `argocd/application.yaml`: the Argo CD Application that syncs the demo overlay from `master`.
-- `.github/workflows/publish-image.yml`: builds, scans and pushes `ghcr.io/sharedcode/joltrin:sha-<commit>`.
+- `.github/workflows/publish-image.yml`: builds, scans, pushes `ghcr.io/sharedcode/joltrin:sha-<commit>` and signs it with keyless cosign.
+- `argocd/kyverno.yaml` and `policies/verify-joltrin-image.yaml`: Kyverno, plus a policy that rejects any pod in `joltrin-demo` whose image was not signed by `publish-image` on `master`.
 
 The cluster and Argo CD come from [gitops-aks-demo](https://github.com/gerardrecinto/gitops-aks-demo) (`make up`, about $0.13 an hour, `make down` removes it).
 
@@ -18,14 +19,18 @@ The cluster and Argo CD come from [gitops-aks-demo](https://github.com/gerardrec
 
 1. Run the `publish-image` workflow. The repository is public and the image holds only binaries built from it, with no secrets, so the GHCR package can be made public once, which lets the cluster pull without a pull secret.
 2. Put the new tag in `k8s/overlays/demo/kustomization.yaml` through a pull request.
-3. From gitops-aks-demo, `make up`, then apply the Application:
+3. From gitops-aks-demo, `make up`, then apply the Applications. Kyverno goes first so the policy CRD exists:
 
 ```
+kubectl apply -f deploy/aks/argocd/kyverno.yaml
+kubectl apply -f deploy/aks/argocd/policies.yaml
 kubectl apply -f deploy/aks/argocd/application.yaml
 kubectl -n argocd get applications
 kubectl -n joltrin-demo port-forward svc/joltrin 8080:80
 ```
 
 4. When done, `make down` in gitops-aks-demo. The volume is deleted with the resource group.
+
+The policy is in Enforce mode, so an image that was not signed by `publish-image` (including any tag built before signing was added) is refused at admission. The tag in the overlay must come from a run of the updated workflow.
 
 One replica is deliberate. The B-Tree engine has no guarantee of safe multi-process writes to one data path, so scaling out needs the Redis-backed lock cache first.

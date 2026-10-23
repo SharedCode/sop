@@ -10,11 +10,10 @@ test.describe('Homepage', () => {
   test('hero states the product and offers one primary action', async ({ page }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     const h1 = page.getByRole('heading', { level: 1 });
-    await expect(h1).toContainText(/independent/i);
-    await expect(h1).toContainText(/verification before/i);
-    await expect(h1).toContainText(/AI agents act/i);
-    await expect(page.getByRole('link', { name: /try the live barrier/i })).toHaveAttribute('href', /agents/);
-    await expect(page.getByRole('link', { name: /quickstart on github/i })).toHaveAttribute('href', /joltrin#try-it-in-five-minutes/);
+    await expect(h1).toContainText(/delete production/i);
+    await expect(h1).toContainText(/who.s stopping it/i);
+    await expect(page.getByRole('link', { name: /try to make an agent drop a database/i })).toHaveAttribute('href', /agents/);
+    await expect(page.getByRole('link', { name: /watch the short demo/i })).toHaveAttribute('href', '#demo-video');
     // The hero text must sit inside the viewport, not be clipped by an overflowing child.
     const fits = await page.evaluate(() => {
       const r = document.querySelector('h1')!.getBoundingClientRect();
@@ -29,6 +28,9 @@ test.describe('Homepage', () => {
     await page.route(/^https:\/\/unpkg\.com\//, (route) => route.abort());
     await page.goto('/', { waitUntil: 'load' });
     const h1 = page.getByRole('heading', { level: 1 });
+    await expect(h1).toBeAttached();
+    // The scroll story sits above the hero, so bring the headline into view first.
+    await h1.scrollIntoViewIfNeeded();
     await expect(h1).toBeVisible();
     await expect
       .poll(
@@ -252,5 +254,95 @@ test.describe('Homepage', () => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('#form-status-alert')).toHaveAttribute('role', 'status');
     await expect(page.locator('#form-status-alert')).toHaveAttribute('aria-live', 'polite');
+  });
+
+  test.describe('scroll story', () => {
+    test('scrolling lights up the opening line and steps through the five decisions', async ({ page }) => {
+      await page.goto('/', { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('html')).toHaveClass(/js-story/);
+      await expect(page.locator('.story-words .w.lit')).toHaveCount(0);
+
+      const total = await page.locator('.story-words .w').count();
+      const introHeight = await page.locator('.story-intro').evaluate((el) => (el as HTMLElement).offsetHeight);
+      await page.evaluate((y) => window.scrollTo(0, y), introHeight * 0.9);
+      await expect.poll(() => page.locator('.story-words .w.lit').count()).toBe(total);
+
+      const pin = page.locator('.story-pin');
+      const [top, height, vh] = await pin.evaluate((el) => [
+        el.getBoundingClientRect().top + window.scrollY,
+        (el as HTMLElement).offsetHeight,
+        window.innerHeight,
+      ]);
+      const track = height - vh;
+      const stepAt = (n: number) => top + track * ((n + 0.5) / 5);
+
+      await page.evaluate((y) => window.scrollTo(0, y), stepAt(0));
+      await expect(page.locator('.story-row.on')).toHaveCount(1);
+      await expect(page.locator('.story-verdict .v-block')).toHaveClass(/show/);
+
+      await page.evaluate((y) => window.scrollTo(0, y), stepAt(4));
+      await expect(page.locator('.story-row.on')).toHaveCount(5);
+      await expect(page.locator('.story-verdict .v-allow')).toHaveClass(/show/);
+      await expect(page.locator('.story-verdict .v-block')).not.toHaveClass(/show/);
+    });
+
+    test('a scroll hint shows at the top and goes away once the visitor scrolls', async ({ page }) => {
+      await page.goto('/', { waitUntil: 'domcontentloaded' });
+      const hint = page.locator('#story-hint');
+      await expect(hint).toBeVisible();
+      await expect(hint).toContainText('Scroll down to continue');
+      await page.evaluate(() => window.scrollTo(0, 200));
+      await expect(hint).toHaveClass(/gone/);
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await expect(hint).not.toHaveClass(/gone/);
+    });
+
+    test('reduced motion renders the finished story with no scripted pinning', async ({ page }) => {
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      await page.goto('/', { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('html')).not.toHaveClass(/js-story/);
+      await expect(page.locator('.story-row')).toHaveCount(5);
+      for (const row of await page.locator('.story-row').all()) {
+        await expect(row).toHaveCSS('opacity', '1');
+      }
+      const position = await page.locator('.story-stage').evaluate((el) => getComputedStyle(el).position);
+      expect(position).not.toBe('sticky');
+      await expect(page.locator('#story-hint')).toBeHidden();
+    });
+  });
+
+  test('hero is fully opaque when it first comes into view below the scroll story', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await page.locator('h1').scrollIntoViewIfNeeded();
+    await page.evaluate(() => window.scrollBy(0, -100));
+    await expect
+      .poll(() => page.locator('main > section').first().evaluate((el) => Number(getComputedStyle(el).opacity)))
+      .toBeGreaterThan(0.95);
+  });
+  test('quickstart Copy button records a copy_quickstart event', async ({ page }) => {
+    await page.route('**/plausible.io/**', (route) => route.abort());
+    await page.addInitScript(() => {
+      (window as any).__copied = '';
+      Object.defineProperty(navigator, 'clipboard', { value: {
+        writeText: async (value: string) => { (window as any).__copied = value; },
+      } });
+      (window as any).__events = [];
+      (window as any).plausible = (name: string) => (window as any).__events.push(name);
+    });
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    const btn = page.locator('#quickstart-copy');
+    await btn.scrollIntoViewIfNeeded();
+    await btn.click();
+    await expect(btn).toHaveText('Copied');
+    expect(await page.evaluate(() => (window as any).__events)).toContain('copy_quickstart');
+    expect(await page.evaluate(() => (window as any).__copied)).toBe('go run github.com/sharedcode/joltrin/v5/examples/verify_barrier@latest');
+  });
+  test('hero names the problem and the FAQ answers how to buy without promising checkout', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('heading', { level: 1 })).toContainText(/delete production/i);
+    await expect(page.locator('#faq details')).toHaveCount(5);
+    const buy = page.locator('#faq details').last();
+    await expect(buy).toContainText('no self-serve checkout yet');
+    await expect(buy).toContainText('not charged');
   });
 });

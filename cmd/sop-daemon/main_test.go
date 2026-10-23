@@ -155,7 +155,7 @@ func TestMain(m *testing.M) {
 		time.Sleep(time.Minute)
 		os.Exit(0)
 	case "sleep":
-		time.Sleep(20 * time.Second)
+		time.Sleep(2 * time.Second)
 		os.Exit(0)
 	}
 	os.Exit(m.Run())
@@ -229,6 +229,9 @@ func Test_TokenIsNotPassedToCommands(t *testing.T) {
 func Test_TimeoutReturnsEvenIfAChildHoldsTheOutputOpen(t *testing.T) {
 	cfg := testConfig(t)
 	cfg.commandTimeout = 300 * time.Millisecond
+	// The orphaned helper outlives the request. On Windows go test cannot delete
+	// the test binary while any copy of it is running, so wait for it to exit.
+	t.Cleanup(func() { time.Sleep(3 * time.Second) })
 	start := time.Now()
 	resp := postExec(t, cfg, map[string]string{"SOP_DAEMON_TEST_HELPER": "orphan"})
 	if elapsed := time.Since(start); elapsed > 8*time.Second {
