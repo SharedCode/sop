@@ -1758,20 +1758,20 @@ Error from server: admission webhook "gate.joltrin.dev" denied the request: step
               <span class="text-[10px] font-mono font-semibold uppercase tracking-wider text-black bg-brand-400 rounded-full px-2 py-0.5">For teams</span>
             </div>
             <div class="mb-2"><span class="text-3xl font-extrabold text-white font-mono">$49</span> <span class="text-xs text-slate-500 font-mono">per month, per team</span></div>
-            <p class="text-xs text-slate-400 mb-4">One place for runbooks and policies, and a record of who changed what.</p>
+            <p class="text-xs text-slate-300 mb-4">For teams that let agents touch real systems. Write the rules once as policy, and keep a tamper-evident record of every allow and block, so you can answer "who let the agent do that?" in minutes.</p>
             <ul class="space-y-2 text-xs text-slate-300 mb-6">
               <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-brand-400 shrink-0"></i><span>Everything in open source</span></li>
-              <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-brand-400 shrink-0"></i><span>Policy-as-code for the barrier</span></li>
-              <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-brand-400 shrink-0"></i><span>Tamper-evident audit lineage</span></li>
+              <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-brand-400 shrink-0"></i><span>Policy-as-code: one set of rules for every agent</span></li>
+              <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-brand-400 shrink-0"></i><span>Tamper-evident audit lineage, with signed export</span></li>
               <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-brand-400 shrink-0"></i><span>Team workspaces and quotas</span></li>
             </ul>
           </div>
           <div>
-            <button onclick="openProCheckoutModal()"
+            <button onclick="track('pro_click'); openProCheckoutModal()"
                     class="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-black font-bold text-xs shadow-lg shadow-brand-500/20 flex items-center justify-center transition cursor-pointer">
               Request Pro
             </button>
-            <p class="text-[11px] text-slate-500 mt-2 text-center">We confirm by email. Self-serve checkout opens when billing is switched on for this site.</p>
+            <p class="text-[11px] text-slate-500 mt-2 text-center">Pro is design-partner access today. We reply by email and set it up with you. Self-serve checkout is not switched on yet.</p>
           </div>
         </div>
 
