@@ -323,6 +323,10 @@ test.describe('Homepage', () => {
   test('quickstart Copy button records a copy_quickstart event', async ({ page }) => {
     await page.route('**/plausible.io/**', (route) => route.abort());
     await page.addInitScript(() => {
+      (window as any).__copied = '';
+      Object.defineProperty(navigator, 'clipboard', { value: {
+        writeText: async (value: string) => { (window as any).__copied = value; },
+      } });
       (window as any).__events = [];
       (window as any).plausible = (name: string) => (window as any).__events.push(name);
     });
@@ -332,5 +336,6 @@ test.describe('Homepage', () => {
     await btn.click();
     await expect(btn).toHaveText('Copied');
     expect(await page.evaluate(() => (window as any).__events)).toContain('copy_quickstart');
+    expect(await page.evaluate(() => (window as any).__copied)).toBe('go run github.com/sharedcode/joltrin/v5/examples/verify_barrier@latest');
   });
 });

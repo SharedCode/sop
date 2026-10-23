@@ -50,7 +50,10 @@
     function copyQuickstart(btn) {
       var cmd = document.getElementById('quickstart-cmd').innerText.trim();
       track('copy_quickstart');
-      try { navigator.clipboard.writeText(cmd); btn.innerText = 'Copied'; } catch (e) {}
+      navigator.clipboard.writeText(cmd).then(
+        function () { btn.innerText = 'Copied'; },
+        function () { btn.innerText = 'Select and copy'; }
+      );
     }
     document.addEventListener('click', function (e) {
       var a = e.target.closest && e.target.closest('a[href]'); if (!a) return;
