@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: joltrin-policies
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/SharedCode/joltrin.git
+    targetRevision: master
+    path: deploy/aks/policies
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kyverno
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      # The ClusterPolicy CRD only exists once the kyverno app has synced.
+      - SkipDryRunOnMissingResource=true
