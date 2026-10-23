@@ -42,6 +42,19 @@
   <script>window.lucide = { createIcons: function () {} };</script>
   <script src="https://unpkg.com/lucide@1.52.0/dist/umd/lucide.min.js" integrity="sha384-SSRIJfpvnhji4rCcULgpNXRJjQ9P/odU9OaWxSumsZiokvJ7zAu4PGQVWyWxTG3u" crossorigin="anonymous" defer></script>
 
+  <!-- Privacy-light analytics (no cookies, no personal data). Events are sent through track() below. -->
+  <script defer data-domain="joltrinhq.com" src="https://plausible.io/js/script.js"></script>
+  <script>
+    window.plausible = window.plausible || function () { (window.plausible.q = window.plausible.q || []).push(arguments); };
+    function track(name) { try { window.plausible(name); } catch (e) {} }
+    document.addEventListener('click', function (e) {
+      var a = e.target.closest && e.target.closest('a[href]'); if (!a) return;
+      var h = a.getAttribute('href') || '';
+      if (/\/docs\/|README|#try-it-in-five-minutes/.test(h)) track('docs_click');
+      else if (/^https:\/\/github\.com\//.test(h)) track('github_click');
+    });
+  </script>
+
   <!-- Go WebAssembly Runtime Support -->
   <script src="wasm_exec.js"></script>
 
@@ -636,6 +649,11 @@
               <i data-lucide="terminal" class="w-4 h-4 text-brand-400"></i>
               <span>Quickstart on GitHub</span>
             </a>
+          </div>
+          <div class="mt-5 min-w-0">
+            <p class="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-1.5">Or run it now (Go 1.26.10 or newer)</p>
+            <pre class="rounded-lg bg-dark-950 border border-dark-700 px-3 py-2 font-mono text-xs text-slate-200 overflow-x-auto"><code>go run github.com/sharedcode/joltrin/v5/examples/verify_barrier@latest</code></pre>
+            <p class="text-[11px] text-slate-500 mt-1.5">It checks the recorded trace, not the world. <a href="#limits" class="underline text-brand-400 hover:text-brand-300">What this does not prove</a></p>
           </div>
         </div>
 
@@ -2668,6 +2686,7 @@ Error from server: admission webhook "gate.joltrin.dev" denied the request: step
       const cycle = form.elements['billing_cycle'].value;
 
       if (!workspace || !email) return;
+      track('pro_request');
 
       btn.disabled = true;
       btnText.innerText = 'Creating Checkout Session...';
@@ -2777,6 +2796,7 @@ Error from server: admission webhook "gate.joltrin.dev" denied the request: step
         while (log.children.length > 6) log.removeChild(log.firstChild);
       }
       function attempt(step) {
+        if (steps === 0) track('demo_start');
         steps++;
         var need = rules[step];
         if (need && !state[need]) {
@@ -2786,6 +2806,7 @@ Error from server: admission webhook "gate.joltrin.dev" denied the request: step
           state[gives[step]] = true;
           line('text-brand-400', step + '  ALLOWED');
           if (step === 'drop_prod_db') {
+            track('demo_complete');
             line('text-slate-300', blocks === 0 ? 'Done in the right order, with no blocks. Nicely done.' : 'Done. You hit ' + blocks + (blocks === 1 ? ' block' : ' blocks') + ' on the way, which is the barrier doing its job.');
           }
         }
