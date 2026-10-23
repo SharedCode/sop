@@ -483,7 +483,7 @@ func (d *DemoDB) performVectorSearch(queryText string, topK int) VectorSearchRes
 		VectorsScanned:       len(d.vectorStore),
 		Dimensions:           128,
 		Results:              matches,
-		EngineMetric:         "Client-Side SIMD/WASM Dot-Product",
+		EngineMetric:         "Client-Side WASM Dot-Product",
 	}
 }
 
