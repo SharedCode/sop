@@ -34,6 +34,18 @@
   <script>window.lucide = { createIcons: function () {} };</script>
   <script src="https://unpkg.com/lucide@1.52.0/dist/umd/lucide.min.js" integrity="sha384-SSRIJfpvnhji4rCcULgpNXRJjQ9P/odU9OaWxSumsZiokvJ7zAu4PGQVWyWxTG3u" crossorigin="anonymous" defer></script>
 
+  <!-- Privacy-light analytics (no cookies, no personal data). -->
+  <script defer data-domain="joltrinhq.com" src="https://plausible.io/js/script.js"></script>
+  <script>
+    window.plausible = window.plausible || function () { (window.plausible.q = window.plausible.q || []).push(arguments); };
+    function track(name) { try { window.plausible(name); } catch (e) {} }
+    document.addEventListener('click', function (e) {
+      var a = e.target.closest && e.target.closest('a[href]'); if (!a) return;
+      var h = a.getAttribute('href') || '';
+      if (/\/docs\/|README|#try-it-in-five-minutes/.test(h)) track('docs_click');
+      else if (/^https:\/\/github\.com\//.test(h)) track('github_click');
+    });
+  </script>
   <script src="wasm_exec.js"></script>
 
   <!--
@@ -771,6 +783,7 @@ curl localhost:8087/.well-known/agent-card.json</pre>
 
     function attemptStep(id) {
       if (!ready) return;
+      if (!window.__demoStarted) { window.__demoStarted = true; track('demo_start'); }
       const res = JSON.parse(sopAgentsExecuteStep(id));
       if (res.blocked) {
         log(`<span class="text-rose-400">→ execute_step(${id}) ... BLOCKED</span>`);
@@ -782,6 +795,7 @@ curl localhost:8087/.well-known/agent-card.json</pre>
         }
       } else {
         log(`<span class="text-brand-400">→ execute_step(${id}) ... committed</span>`);
+        if (id === 'drop_prod_db') track('demo_complete');
       }
       renderSteps(res.trace);
       afterStep(id, res);
