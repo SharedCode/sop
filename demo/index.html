@@ -1257,6 +1257,295 @@ Error from server: admission webhook "gate.joltrin.dev" denied the request: step
       </dl>
     </section>
 
+    <!-- Open core and plans -->
+    <section id="pricing" class="mt-14 mb-12 pt-8 border-t border-dark-800">
+      <div class="text-center max-w-2xl mx-auto mb-8">
+        <h2 class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">Open core, paid governance</h2>
+        <p class="text-slate-400 text-sm sm:text-base mt-3 leading-relaxed">
+          The engine, vector search, agent memory, and the verification barrier are MIT licensed and stay free. Paid plans add team governance on top.
+        </p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        <div class="bg-dark-900 border border-dark-800 rounded-2xl p-6 flex flex-col justify-between">
+          <div>
+            <h3 class="text-xs font-mono font-semibold uppercase tracking-wider text-slate-400 mb-3">Open source</h3>
+            <div class="mb-4"><span class="text-3xl font-extrabold text-white font-mono">$0</span> <span class="text-xs text-slate-500 font-mono">MIT license</span></div>
+            <ul class="space-y-2 text-xs text-slate-300 mb-6">
+              <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-brand-400 shrink-0"></i><span>Embedded ACID B-Tree engine</span></li>
+              <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-brand-400 shrink-0"></i><span>Durable agent memory and vector search</span></li>
+              <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-brand-400 shrink-0"></i><span>Verification barrier, MCP and A2A servers</span></li>
+              <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-brand-400 shrink-0"></i><span>Community support on GitHub</span></li>
+            </ul>
+          </div>
+          <a href="https://github.com/SharedCode/joltrin" target="_blank" rel="noopener noreferrer"
+             class="w-full py-2.5 px-4 rounded-xl bg-dark-800 hover:bg-dark-750 border border-dark-700 text-slate-200 font-semibold text-xs flex items-center justify-center transition">
+            Get it on GitHub
+          </a>
+        </div>
+
+        <div class="relative bg-dark-900 border border-brand-500/60 ring-1 ring-brand-500/30 rounded-2xl p-6 flex flex-col justify-between shadow-xl shadow-brand-500/10">
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="text-xs font-mono font-semibold uppercase tracking-wider text-brand-400">Pro</h3>
+              <span class="text-[10px] font-mono font-semibold uppercase tracking-wider text-black bg-brand-400 rounded-full px-2 py-0.5">For teams</span>
+            </div>
+            <div class="mb-2"><span class="text-3xl font-extrabold text-white font-mono">$49</span> <span class="text-xs text-slate-500 font-mono">per month, per team</span></div>
+            <p class="text-xs text-slate-300 mb-4">For teams that let agents touch real systems. Write the rules once as policy, and keep a tamper-evident record of every allow and block, so you can answer "who let the agent do that?" in minutes.</p>
+            <ul class="space-y-2 text-xs text-slate-300 mb-6">
+              <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-brand-400 shrink-0"></i><span>Everything in open source</span></li>
+              <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-brand-400 shrink-0"></i><span>Policy-as-code: one set of rules for every agent</span></li>
+              <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-brand-400 shrink-0"></i><span>Tamper-evident audit lineage, with signed export</span></li>
+              <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-brand-400 shrink-0"></i><span>Team workspaces and quotas</span></li>
+            </ul>
+          </div>
+          <div>
+            <button onclick="track('pro_click'); openProCheckoutModal()"
+                    class="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-black font-bold text-xs shadow-lg shadow-brand-500/20 flex items-center justify-center transition cursor-pointer">
+              Request Pro
+            </button>
+            <p class="text-[11px] text-slate-500 mt-2 text-center">Pro is design-partner access today. We reply by email and set it up with you. Self-serve checkout is not switched on yet.</p>
+          </div>
+        </div>
+
+        <div class="bg-dark-900 border border-accent-violet/30 rounded-2xl p-6 flex flex-col justify-between">
+          <div>
+            <h3 class="text-xs font-mono font-semibold uppercase tracking-wider text-accent-violet mb-3">Enterprise</h3>
+            <div class="mb-4"><span class="text-3xl font-extrabold text-white font-mono">Contact us</span></div>
+            <ul class="space-y-2 text-xs text-slate-300 mb-6">
+              <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-accent-violet shrink-0"></i><span>Everything in Pro</span></li>
+              <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-accent-violet shrink-0"></i><span>Okta and Microsoft Entra ID sign-in</span></li>
+              <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-accent-violet shrink-0"></i><span>Custom safety rules for your runbooks</span></li>
+              <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-accent-violet shrink-0"></i><span>Compliance audit exports</span></li>
+            </ul>
+          </div>
+          <button onclick="selectTierAndScroll('enterprise')"
+                  class="w-full py-2.5 px-4 rounded-xl bg-dark-800 hover:bg-dark-750 border border-dark-700 hover:border-accent-violet/50 text-slate-200 hover:text-white font-semibold text-xs flex items-center justify-center transition cursor-pointer">
+            Talk to us
+          </button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        <div class="bg-dark-900 border border-dark-800 rounded-2xl p-5">
+          <h3 class="text-xs font-mono font-semibold uppercase tracking-wider text-slate-400 mb-2">Start free</h3>
+          <p class="text-xs text-slate-300 leading-relaxed">One developer, one agent, no account. Run the barrier on your own runbook and watch it block a bad step and say what to do next.</p>
+          <a href="./agents/" class="text-xs text-brand-400 hover:underline inline-block mt-3" style="padding-block:.4rem">Try the barrier in your browser</a>
+        </div>
+        <div class="bg-dark-900 border border-brand-500/40 rounded-2xl p-5">
+          <h3 class="text-xs font-mono font-semibold uppercase tracking-wider text-brand-400 mb-2">Move to Pro when</h3>
+          <p class="text-xs text-slate-300 leading-relaxed">More than one person edits runbooks and policies, and you want one place for them plus a record of who changed what. Policy compilation, the hash-chained audit log, and team workspaces are in the governance package in the public repo today.</p>
+          <a href="https://github.com/SharedCode/joltrin/blob/master/docs/MONETIZATION_AND_TIERS.md" target="_blank" rel="noopener noreferrer" class="text-xs text-brand-400 hover:underline inline-block mt-3" style="padding-block:.4rem">What is built and what is not</a>
+        </div>
+        <div class="bg-dark-900 border border-accent-violet/30 rounded-2xl p-5">
+          <h3 class="text-xs font-mono font-semibold uppercase tracking-wider text-accent-violet mb-2">Move to Enterprise when</h3>
+          <p class="text-xs text-slate-300 leading-relaxed">Security or compliance asks for single sign-on, signed audit records, and a named owner for production approvals. Okta and Entra ID support and audit signing exist as building blocks; we scope the rollout with each team instead of promising a checklist.</p>
+          <button onclick="selectTierAndScroll('enterprise')" class="text-xs text-accent-violet hover:underline mt-3 cursor-pointer" style="padding-block:.4rem">Tell us what you need</button>
+        </div>
+      </div>
+
+      <p class="text-xs text-slate-500 text-center">
+        Hosted Joltrin Cloud is planned and not available yet.
+        <button onclick="selectTierAndScroll('hosted')" class="text-accent-cyan hover:underline cursor-pointer" style="padding-block:.4rem">Join the waitlist</button>.
+      </p>
+    </section>
+
+    <!-- SECTION 12: CUSTOMER INTEREST / ENTERPRISE INQUIRY FORM -->
+    <section id="enterprise" class="mt-8 mb-12 p-6 sm:p-10 rounded-2xl bg-dark-900 border border-dark-800 relative overflow-hidden">
+      <div class="max-w-2xl mx-auto">
+        <div class="text-center mb-8">
+          <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-brand-500/10 border border-brand-500/30 text-brand-400 text-xs font-mono font-semibold uppercase tracking-wider mb-2">
+            <i data-lucide="building" class="w-3.5 h-3.5"></i>
+            <span>Enterprise</span>
+          </div>
+          <h2 class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+            Tell Us What You're Building
+          </h2>
+          <p class="text-slate-400 text-xs sm:text-sm mt-2 leading-relaxed">
+            A few details about your agents and what you need, and we'll follow up personally.
+          </p>
+        </div>
+
+        <!-- Submission Status Banner -->
+        <div id="form-status-alert" role="status" aria-live="polite" class="hidden mb-6 p-4 rounded-xl text-xs"></div>
+
+        <!-- Form Component -->
+        <form id="interest-form" onsubmit="handleFormSubmit(event)" class="space-y-4">
+
+          <!-- Honeypot Anti-Spam Field (hidden) -->
+          <div style="display:none;" aria-hidden="true">
+            <label for="interest-hp">Do not fill this</label>
+            <input type="text" id="interest-hp" name="website_hp" tabindex="-1" autocomplete="off" />
+          </div>
+          <input type="hidden" id="interest-ts" name="render_ts" value="" />
+
+          <!-- Row 1: Name & Email -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label for="inq-name" class="block text-xs font-mono text-slate-300 mb-1">
+                Full Name <span class="text-rose-400">*</span>
+              </label>
+              <input id="inq-name" name="name" type="text" required placeholder="Jane Doe"
+                     class="w-full bg-dark-950 border border-dark-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-600 focus:border-brand-500 focus:outline-none" />
+            </div>
+            <div>
+              <label for="inq-email" class="block text-xs font-mono text-slate-300 mb-1">
+                Work Email <span class="text-rose-400">*</span>
+              </label>
+              <input id="inq-email" name="email" type="email" required placeholder="jane@company.com"
+                     class="w-full bg-dark-950 border border-dark-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-600 focus:border-brand-500 focus:outline-none" />
+            </div>
+          </div>
+
+          <!-- Row 2: Company & Job Title -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label for="inq-company" class="block text-xs font-mono text-slate-300 mb-1">
+                Company Name <span class="text-rose-400">*</span>
+              </label>
+              <input id="inq-company" name="company" type="text" required placeholder="Acme AI Corp"
+                     class="w-full bg-dark-950 border border-dark-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-600 focus:border-brand-500 focus:outline-none" />
+            </div>
+            <div>
+              <label for="inq-role" class="block text-xs font-mono text-slate-300 mb-1">
+                Job Title / Role
+              </label>
+              <input id="inq-role" name="role" type="text" placeholder="Staff Infrastructure Engineer"
+                     class="w-full bg-dark-950 border border-dark-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-600 focus:border-brand-500 focus:outline-none" />
+            </div>
+          </div>
+
+          <!-- Row 3: Tier -->
+          <div class="grid grid-cols-1 gap-4">
+            <div>
+              <label for="inq-tier" class="block text-xs font-mono text-slate-300 mb-1">
+                Tier Interested In <span class="text-rose-400">*</span>
+              </label>
+              <select id="inq-tier" name="tier" onchange="handleTierChange(this.value)"
+                      class="w-full bg-dark-950 border border-dark-700 rounded-lg px-3 py-2 text-xs font-mono text-white focus:border-brand-500 focus:outline-none">
+                <option value="pro">Pro ($49/mo team governance)</option>
+                <option value="enterprise" selected>Enterprise (SSO, RBAC &amp; SLAs)</option>
+                <option value="hosted">Hosted Cloud (Waitlist)</option>
+                <option value="not_sure">Not sure / Evaluating options</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Row 4: Primary Use Case -->
+          <div class="grid grid-cols-1 gap-4">
+            <div>
+              <label for="inq-usecase" class="block text-xs font-mono text-slate-300 mb-1">
+                Primary Use Case <span class="text-rose-400">*</span>
+              </label>
+              <select id="inq-usecase" name="use_cases"
+                      class="w-full bg-dark-950 border border-dark-700 rounded-lg px-3 py-2 text-xs font-mono text-white focus:border-brand-500 focus:outline-none">
+                <option value="ai_devops">AI DevOps &amp; Infrastructure Automation</option>
+                <option value="swe_agents">Software Engineering &amp; Coding Agents</option>
+                <option value="enterprise_workflows">Enterprise Workflow &amp; Approval Agents</option>
+                <option value="multi_agent">Multi-Agent Swarms &amp; Coordination</option>
+                <option value="mcp_infrastructure">MCP / Tool Verification Barrier</option>
+                <option value="other">Other Agent Deployment</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Optional details, collapsed so the first view is five fields -->
+          <details id="inq-more" class="group rounded-xl border border-dark-800 bg-dark-950/40">
+            <summary class="cursor-pointer select-none px-4 py-3 text-xs font-mono text-slate-300 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded-xl">
+              More details (optional)
+            </summary>
+            <div class="space-y-4 p-4 pt-1">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label for="inq-size" class="block text-xs font-mono text-slate-300 mb-1">
+                  Company Size
+                </label>
+                <select id="inq-size" name="company_size"
+                        class="w-full bg-dark-950 border border-dark-700 rounded-lg px-3 py-2 text-xs font-mono text-white focus:border-brand-500 focus:outline-none">
+                  <option value="1-10">1 – 10 employees</option>
+                  <option value="11-50">11 – 50 employees</option>
+                  <option value="51-200" selected>51 – 200 employees</option>
+                  <option value="201-1000">201 – 1,000 employees</option>
+                  <option value="1000+">1,000+ employees</option>
+                </select>
+              </div>
+              <div>
+                <label for="inq-agents" class="block text-xs font-mono text-slate-300 mb-1">
+                  Approx Number of AI Agents
+                </label>
+                <select id="inq-agents" name="approx_agents"
+                        class="w-full bg-dark-950 border border-dark-700 rounded-lg px-3 py-2 text-xs font-mono text-white focus:border-brand-500 focus:outline-none">
+                  <option value="1-5">1 – 5 agents</option>
+                  <option value="6-25" selected>6 – 25 agents</option>
+                  <option value="26-100">26 – 100 agents</option>
+                  <option value="100+">100+ agents</option>
+                </select>
+              </div>
+              </div>
+            <!-- Conditional Enterprise Fields: IDP & Deployment -->
+            <div id="enterprise-extras" class="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3 bg-dark-950/60 border border-dark-800 rounded-xl">
+              <div>
+                <label for="inq-idp" class="block text-xs font-mono text-slate-300 mb-1">
+                  Identity Provider (SSO)
+                </label>
+                <select id="inq-idp" name="idp"
+                        class="w-full bg-dark-900 border border-dark-700 rounded-lg px-3 py-2 text-xs font-mono text-white focus:border-brand-500 focus:outline-none">
+                  <option value="okta">Okta (OIDC)</option>
+                  <option value="entra_id">Microsoft Entra ID (Azure AD)</option>
+                  <option value="other">Other IdP / Custom SAML</option>
+                  <option value="none">None / Not required yet</option>
+                </select>
+              </div>
+              <div>
+                <label for="inq-deploy" class="block text-xs font-mono text-slate-300 mb-1">
+                  Deployment Preference
+                </label>
+                <select id="inq-deploy" name="deployment"
+                        class="w-full bg-dark-900 border border-dark-700 rounded-lg px-3 py-2 text-xs font-mono text-white focus:border-brand-500 focus:outline-none">
+                  <option value="self_hosted" selected>Self-Hosted (Kubernetes / Docker)</option>
+                  <option value="hosted">Interested in Managed Cloud</option>
+                  <option value="hybrid">Hybrid Deployment</option>
+                  <option value="not_sure">Not sure</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Row 5: Website URL (optional) -->
+            <div>
+              <label for="inq-website" class="block text-xs font-mono text-slate-300 mb-1">
+                Company Website (Optional)
+              </label>
+              <input id="inq-website" name="website" type="url" placeholder="https://example.com"
+                     class="w-full bg-dark-950 border border-dark-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-600 focus:border-brand-500 focus:outline-none" />
+            </div>
+            </div>
+          </details>
+
+          <!-- Row 6: Requirements Message -->
+          <div>
+            <label for="inq-message" class="block text-xs font-mono text-slate-300 mb-1">
+              What are you hoping to build with Joltrin?
+            </label>
+            <textarea id="inq-message" name="message" rows="3" placeholder="The agents you're deploying, how many, or any compliance questions you have..."
+                      class="w-full bg-dark-950 border border-dark-700 rounded-lg p-3 text-xs text-white placeholder-slate-600 focus:border-brand-500 focus:outline-none"></textarea>
+          </div>
+
+          <!-- Submit Button & Security Note -->
+          <div class="pt-2">
+            <button id="inq-submit-btn" type="submit"
+                    class="w-full py-3 px-6 rounded-xl bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 font-bold text-xs text-black shadow-lg shadow-brand-500/20 flex items-center justify-center space-x-2 transition transform active:scale-95 cursor-pointer">
+              <i data-lucide="send" class="w-4 h-4"></i>
+              <span id="submit-btn-text">Talk to Us</span>
+            </button>
+            <p class="text-[11px] text-slate-500 text-center font-mono mt-2">
+              No credit card needed. We reply by email.
+            </p>
+          </div>
+
+        </form>
+      </div>
+    </section>
+
     <!-- Supporting capability: durable agent memory -->
     <section id="durable-memory" class="mb-12 p-6 sm:p-10 rounded-2xl bg-dark-900 border border-dark-800">
       <div class="max-w-3xl mb-8">
@@ -1726,294 +2015,6 @@ Error from server: admission webhook "gate.joltrin.dev" denied the request: step
     </div>
     </section> <!-- /#under-the-hood -->
 
-    <!-- Open core and plans -->
-    <section id="pricing" class="mt-14 mb-12 pt-8 border-t border-dark-800">
-      <div class="text-center max-w-2xl mx-auto mb-8">
-        <h2 class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">Open core, paid governance</h2>
-        <p class="text-slate-400 text-sm sm:text-base mt-3 leading-relaxed">
-          The engine, vector search, agent memory, and the verification barrier are MIT licensed and stay free. Paid plans add team governance on top.
-        </p>
-      </div>
-
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-        <div class="bg-dark-900 border border-dark-800 rounded-2xl p-6 flex flex-col justify-between">
-          <div>
-            <h3 class="text-xs font-mono font-semibold uppercase tracking-wider text-slate-400 mb-3">Open source</h3>
-            <div class="mb-4"><span class="text-3xl font-extrabold text-white font-mono">$0</span> <span class="text-xs text-slate-500 font-mono">MIT license</span></div>
-            <ul class="space-y-2 text-xs text-slate-300 mb-6">
-              <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-brand-400 shrink-0"></i><span>Embedded ACID B-Tree engine</span></li>
-              <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-brand-400 shrink-0"></i><span>Durable agent memory and vector search</span></li>
-              <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-brand-400 shrink-0"></i><span>Verification barrier, MCP and A2A servers</span></li>
-              <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-brand-400 shrink-0"></i><span>Community support on GitHub</span></li>
-            </ul>
-          </div>
-          <a href="https://github.com/SharedCode/joltrin" target="_blank" rel="noopener noreferrer"
-             class="w-full py-2.5 px-4 rounded-xl bg-dark-800 hover:bg-dark-750 border border-dark-700 text-slate-200 font-semibold text-xs flex items-center justify-center transition">
-            Get it on GitHub
-          </a>
-        </div>
-
-        <div class="relative bg-dark-900 border border-brand-500/60 ring-1 ring-brand-500/30 rounded-2xl p-6 flex flex-col justify-between shadow-xl shadow-brand-500/10">
-          <div>
-            <div class="flex items-center justify-between mb-3">
-              <h3 class="text-xs font-mono font-semibold uppercase tracking-wider text-brand-400">Pro</h3>
-              <span class="text-[10px] font-mono font-semibold uppercase tracking-wider text-black bg-brand-400 rounded-full px-2 py-0.5">For teams</span>
-            </div>
-            <div class="mb-2"><span class="text-3xl font-extrabold text-white font-mono">$49</span> <span class="text-xs text-slate-500 font-mono">per month, per team</span></div>
-            <p class="text-xs text-slate-300 mb-4">For teams that let agents touch real systems. Write the rules once as policy, and keep a tamper-evident record of every allow and block, so you can answer "who let the agent do that?" in minutes.</p>
-            <ul class="space-y-2 text-xs text-slate-300 mb-6">
-              <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-brand-400 shrink-0"></i><span>Everything in open source</span></li>
-              <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-brand-400 shrink-0"></i><span>Policy-as-code: one set of rules for every agent</span></li>
-              <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-brand-400 shrink-0"></i><span>Tamper-evident audit lineage, with signed export</span></li>
-              <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-brand-400 shrink-0"></i><span>Team workspaces and quotas</span></li>
-            </ul>
-          </div>
-          <div>
-            <button onclick="track('pro_click'); openProCheckoutModal()"
-                    class="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-black font-bold text-xs shadow-lg shadow-brand-500/20 flex items-center justify-center transition cursor-pointer">
-              Request Pro
-            </button>
-            <p class="text-[11px] text-slate-500 mt-2 text-center">Pro is design-partner access today. We reply by email and set it up with you. Self-serve checkout is not switched on yet.</p>
-          </div>
-        </div>
-
-        <div class="bg-dark-900 border border-accent-violet/30 rounded-2xl p-6 flex flex-col justify-between">
-          <div>
-            <h3 class="text-xs font-mono font-semibold uppercase tracking-wider text-accent-violet mb-3">Enterprise</h3>
-            <div class="mb-4"><span class="text-3xl font-extrabold text-white font-mono">Contact us</span></div>
-            <ul class="space-y-2 text-xs text-slate-300 mb-6">
-              <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-accent-violet shrink-0"></i><span>Everything in Pro</span></li>
-              <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-accent-violet shrink-0"></i><span>Okta and Microsoft Entra ID sign-in</span></li>
-              <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-accent-violet shrink-0"></i><span>Custom safety rules for your runbooks</span></li>
-              <li class="flex items-start space-x-2"><i data-lucide="check" class="w-4 h-4 text-accent-violet shrink-0"></i><span>Compliance audit exports</span></li>
-            </ul>
-          </div>
-          <button onclick="selectTierAndScroll('enterprise')"
-                  class="w-full py-2.5 px-4 rounded-xl bg-dark-800 hover:bg-dark-750 border border-dark-700 hover:border-accent-violet/50 text-slate-200 hover:text-white font-semibold text-xs flex items-center justify-center transition cursor-pointer">
-            Talk to us
-          </button>
-        </div>
-      </div>
-
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-        <div class="bg-dark-900 border border-dark-800 rounded-2xl p-5">
-          <h3 class="text-xs font-mono font-semibold uppercase tracking-wider text-slate-400 mb-2">Start free</h3>
-          <p class="text-xs text-slate-300 leading-relaxed">One developer, one agent, no account. Run the barrier on your own runbook and watch it block a bad step and say what to do next.</p>
-          <a href="./agents/" class="text-xs text-brand-400 hover:underline inline-block mt-3" style="padding-block:.4rem">Try the barrier in your browser</a>
-        </div>
-        <div class="bg-dark-900 border border-brand-500/40 rounded-2xl p-5">
-          <h3 class="text-xs font-mono font-semibold uppercase tracking-wider text-brand-400 mb-2">Move to Pro when</h3>
-          <p class="text-xs text-slate-300 leading-relaxed">More than one person edits runbooks and policies, and you want one place for them plus a record of who changed what. Policy compilation, the hash-chained audit log, and team workspaces are in the governance package in the public repo today.</p>
-          <a href="https://github.com/SharedCode/joltrin/blob/master/docs/MONETIZATION_AND_TIERS.md" target="_blank" rel="noopener noreferrer" class="text-xs text-brand-400 hover:underline inline-block mt-3" style="padding-block:.4rem">What is built and what is not</a>
-        </div>
-        <div class="bg-dark-900 border border-accent-violet/30 rounded-2xl p-5">
-          <h3 class="text-xs font-mono font-semibold uppercase tracking-wider text-accent-violet mb-2">Move to Enterprise when</h3>
-          <p class="text-xs text-slate-300 leading-relaxed">Security or compliance asks for single sign-on, signed audit records, and a named owner for production approvals. Okta and Entra ID support and audit signing exist as building blocks; we scope the rollout with each team instead of promising a checklist.</p>
-          <button onclick="selectTierAndScroll('enterprise')" class="text-xs text-accent-violet hover:underline mt-3 cursor-pointer" style="padding-block:.4rem">Tell us what you need</button>
-        </div>
-      </div>
-
-      <p class="text-xs text-slate-500 text-center">
-        Hosted Joltrin Cloud is planned and not available yet.
-        <button onclick="selectTierAndScroll('hosted')" class="text-accent-cyan hover:underline cursor-pointer" style="padding-block:.4rem">Join the waitlist</button>.
-      </p>
-    </section>
-
-    <!-- SECTION 12: CUSTOMER INTEREST / ENTERPRISE INQUIRY FORM -->
-    <section id="enterprise" class="mt-8 mb-12 p-6 sm:p-10 rounded-2xl bg-dark-900 border border-dark-800 relative overflow-hidden">
-      <div class="max-w-2xl mx-auto">
-        <div class="text-center mb-8">
-          <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-brand-500/10 border border-brand-500/30 text-brand-400 text-xs font-mono font-semibold uppercase tracking-wider mb-2">
-            <i data-lucide="building" class="w-3.5 h-3.5"></i>
-            <span>Enterprise</span>
-          </div>
-          <h2 class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-            Tell Us What You're Building
-          </h2>
-          <p class="text-slate-400 text-xs sm:text-sm mt-2 leading-relaxed">
-            A few details about your agents and what you need, and we'll follow up personally.
-          </p>
-        </div>
-
-        <!-- Submission Status Banner -->
-        <div id="form-status-alert" role="status" aria-live="polite" class="hidden mb-6 p-4 rounded-xl text-xs"></div>
-
-        <!-- Form Component -->
-        <form id="interest-form" onsubmit="handleFormSubmit(event)" class="space-y-4">
-
-          <!-- Honeypot Anti-Spam Field (hidden) -->
-          <div style="display:none;" aria-hidden="true">
-            <label for="interest-hp">Do not fill this</label>
-            <input type="text" id="interest-hp" name="website_hp" tabindex="-1" autocomplete="off" />
-          </div>
-          <input type="hidden" id="interest-ts" name="render_ts" value="" />
-
-          <!-- Row 1: Name & Email -->
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label for="inq-name" class="block text-xs font-mono text-slate-300 mb-1">
-                Full Name <span class="text-rose-400">*</span>
-              </label>
-              <input id="inq-name" name="name" type="text" required placeholder="Jane Doe"
-                     class="w-full bg-dark-950 border border-dark-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-600 focus:border-brand-500 focus:outline-none" />
-            </div>
-            <div>
-              <label for="inq-email" class="block text-xs font-mono text-slate-300 mb-1">
-                Work Email <span class="text-rose-400">*</span>
-              </label>
-              <input id="inq-email" name="email" type="email" required placeholder="jane@company.com"
-                     class="w-full bg-dark-950 border border-dark-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-600 focus:border-brand-500 focus:outline-none" />
-            </div>
-          </div>
-
-          <!-- Row 2: Company & Job Title -->
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label for="inq-company" class="block text-xs font-mono text-slate-300 mb-1">
-                Company Name <span class="text-rose-400">*</span>
-              </label>
-              <input id="inq-company" name="company" type="text" required placeholder="Acme AI Corp"
-                     class="w-full bg-dark-950 border border-dark-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-600 focus:border-brand-500 focus:outline-none" />
-            </div>
-            <div>
-              <label for="inq-role" class="block text-xs font-mono text-slate-300 mb-1">
-                Job Title / Role
-              </label>
-              <input id="inq-role" name="role" type="text" placeholder="Staff Infrastructure Engineer"
-                     class="w-full bg-dark-950 border border-dark-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-600 focus:border-brand-500 focus:outline-none" />
-            </div>
-          </div>
-
-          <!-- Row 3: Tier -->
-          <div class="grid grid-cols-1 gap-4">
-            <div>
-              <label for="inq-tier" class="block text-xs font-mono text-slate-300 mb-1">
-                Tier Interested In <span class="text-rose-400">*</span>
-              </label>
-              <select id="inq-tier" name="tier" onchange="handleTierChange(this.value)"
-                      class="w-full bg-dark-950 border border-dark-700 rounded-lg px-3 py-2 text-xs font-mono text-white focus:border-brand-500 focus:outline-none">
-                <option value="pro">Pro ($49/mo team governance)</option>
-                <option value="enterprise" selected>Enterprise (SSO, RBAC &amp; SLAs)</option>
-                <option value="hosted">Hosted Cloud (Waitlist)</option>
-                <option value="not_sure">Not sure / Evaluating options</option>
-              </select>
-            </div>
-          </div>
-
-          <!-- Row 4: Primary Use Case -->
-          <div class="grid grid-cols-1 gap-4">
-            <div>
-              <label for="inq-usecase" class="block text-xs font-mono text-slate-300 mb-1">
-                Primary Use Case <span class="text-rose-400">*</span>
-              </label>
-              <select id="inq-usecase" name="use_cases"
-                      class="w-full bg-dark-950 border border-dark-700 rounded-lg px-3 py-2 text-xs font-mono text-white focus:border-brand-500 focus:outline-none">
-                <option value="ai_devops">AI DevOps &amp; Infrastructure Automation</option>
-                <option value="swe_agents">Software Engineering &amp; Coding Agents</option>
-                <option value="enterprise_workflows">Enterprise Workflow &amp; Approval Agents</option>
-                <option value="multi_agent">Multi-Agent Swarms &amp; Coordination</option>
-                <option value="mcp_infrastructure">MCP / Tool Verification Barrier</option>
-                <option value="other">Other Agent Deployment</option>
-              </select>
-            </div>
-          </div>
-
-          <!-- Optional details, collapsed so the first view is five fields -->
-          <details id="inq-more" class="group rounded-xl border border-dark-800 bg-dark-950/40">
-            <summary class="cursor-pointer select-none px-4 py-3 text-xs font-mono text-slate-300 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded-xl">
-              More details (optional)
-            </summary>
-            <div class="space-y-4 p-4 pt-1">
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label for="inq-size" class="block text-xs font-mono text-slate-300 mb-1">
-                  Company Size
-                </label>
-                <select id="inq-size" name="company_size"
-                        class="w-full bg-dark-950 border border-dark-700 rounded-lg px-3 py-2 text-xs font-mono text-white focus:border-brand-500 focus:outline-none">
-                  <option value="1-10">1 – 10 employees</option>
-                  <option value="11-50">11 – 50 employees</option>
-                  <option value="51-200" selected>51 – 200 employees</option>
-                  <option value="201-1000">201 – 1,000 employees</option>
-                  <option value="1000+">1,000+ employees</option>
-                </select>
-              </div>
-              <div>
-                <label for="inq-agents" class="block text-xs font-mono text-slate-300 mb-1">
-                  Approx Number of AI Agents
-                </label>
-                <select id="inq-agents" name="approx_agents"
-                        class="w-full bg-dark-950 border border-dark-700 rounded-lg px-3 py-2 text-xs font-mono text-white focus:border-brand-500 focus:outline-none">
-                  <option value="1-5">1 – 5 agents</option>
-                  <option value="6-25" selected>6 – 25 agents</option>
-                  <option value="26-100">26 – 100 agents</option>
-                  <option value="100+">100+ agents</option>
-                </select>
-              </div>
-              </div>
-            <!-- Conditional Enterprise Fields: IDP & Deployment -->
-            <div id="enterprise-extras" class="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3 bg-dark-950/60 border border-dark-800 rounded-xl">
-              <div>
-                <label for="inq-idp" class="block text-xs font-mono text-slate-300 mb-1">
-                  Identity Provider (SSO)
-                </label>
-                <select id="inq-idp" name="idp"
-                        class="w-full bg-dark-900 border border-dark-700 rounded-lg px-3 py-2 text-xs font-mono text-white focus:border-brand-500 focus:outline-none">
-                  <option value="okta">Okta (OIDC)</option>
-                  <option value="entra_id">Microsoft Entra ID (Azure AD)</option>
-                  <option value="other">Other IdP / Custom SAML</option>
-                  <option value="none">None / Not required yet</option>
-                </select>
-              </div>
-              <div>
-                <label for="inq-deploy" class="block text-xs font-mono text-slate-300 mb-1">
-                  Deployment Preference
-                </label>
-                <select id="inq-deploy" name="deployment"
-                        class="w-full bg-dark-900 border border-dark-700 rounded-lg px-3 py-2 text-xs font-mono text-white focus:border-brand-500 focus:outline-none">
-                  <option value="self_hosted" selected>Self-Hosted (Kubernetes / Docker)</option>
-                  <option value="hosted">Interested in Managed Cloud</option>
-                  <option value="hybrid">Hybrid Deployment</option>
-                  <option value="not_sure">Not sure</option>
-                </select>
-              </div>
-            </div>
-
-            <!-- Row 5: Website URL (optional) -->
-            <div>
-              <label for="inq-website" class="block text-xs font-mono text-slate-300 mb-1">
-                Company Website (Optional)
-              </label>
-              <input id="inq-website" name="website" type="url" placeholder="https://example.com"
-                     class="w-full bg-dark-950 border border-dark-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-600 focus:border-brand-500 focus:outline-none" />
-            </div>
-            </div>
-          </details>
-
-          <!-- Row 6: Requirements Message -->
-          <div>
-            <label for="inq-message" class="block text-xs font-mono text-slate-300 mb-1">
-              What are you hoping to build with Joltrin?
-            </label>
-            <textarea id="inq-message" name="message" rows="3" placeholder="The agents you're deploying, how many, or any compliance questions you have..."
-                      class="w-full bg-dark-950 border border-dark-700 rounded-lg p-3 text-xs text-white placeholder-slate-600 focus:border-brand-500 focus:outline-none"></textarea>
-          </div>
-
-          <!-- Submit Button & Security Note -->
-          <div class="pt-2">
-            <button id="inq-submit-btn" type="submit"
-                    class="w-full py-3 px-6 rounded-xl bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 font-bold text-xs text-black shadow-lg shadow-brand-500/20 flex items-center justify-center space-x-2 transition transform active:scale-95 cursor-pointer">
-              <i data-lucide="send" class="w-4 h-4"></i>
-              <span id="submit-btn-text">Talk to Us</span>
-            </button>
-            <p class="text-[11px] text-slate-500 text-center font-mono mt-2">
-              No credit card needed. We reply by email.
-            </p>
-          </div>
-
-        </form>
-      </div>
-    </section>
 
     <!-- Pro Checkout & Onboarding Modal -->
     <div id="pro-checkout-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
