@@ -503,11 +503,11 @@ curl localhost:8087/.well-known/agent-card.json</pre>
             Want this on your own agents?
           </h2>
           <p class="text-slate-400 text-xs sm:text-sm mt-2">
-            The barrier is open source. Pro adds team governance, and Enterprise adds Okta or Entra ID sign-in and custom policy rules. Tell us what you are building and we will follow up.
+            The barrier is open source and stays free. Pro is for teams that need one shared policy for every agent and a record of each allow and block. Enterprise adds Okta or Entra ID sign-in and custom policy rules. Tell us what you are building and we will follow up.
           </p>
 
           <div class="flex flex-wrap items-center justify-center gap-3 mt-4">
-            <a href="../#pricing" class="px-4 py-2 rounded-xl bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 font-bold text-xs text-black shadow-lg shadow-brand-500/20 transition">
+            <a href="../#pricing" onclick="track('pro_click')" class="px-4 py-2 rounded-xl bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 font-bold text-xs text-black shadow-lg shadow-brand-500/20 transition">
               Explore Pro ($49/mo)
             </a>
             <button type="button" onclick="document.getElementById('inq-tier-agents').value='enterprise'; document.getElementById('inq-name-agents').focus();"
