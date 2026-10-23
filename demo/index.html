@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Joltrin | Independent verification before AI agents act</title>
-  <meta name="description" content="Check an AI agent's proposed action against recorded workflow state and explicit prerequisites before it commits, and get an actionable decision when a step is missing. A Go verification engine with MCP and A2A servers. Open source." />
+  <title>Joltrin | Stop an AI agent from running a risky step too early</title>
+  <meta name="description" content="Joltrin blocks an AI agent&#39;s risky step, like dropping a database, until the steps before it are recorded, and tells the agent what to do first. Open source. Try it in your browser." />
   <meta name="keywords" content="AI agent verification barrier, independent verifier, deterministic preconditions, AI agent safety, MCP, A2A, agent policy enforcement, Go, WebAssembly" />
   <link rel="canonical" href="https://joltrinhq.com/" />
   <meta name="color-scheme" content="dark light" />
@@ -639,31 +639,29 @@
       <div class="absolute top-0 right-0 -mt-8 -mr-8 w-72 h-72 bg-brand-500/10 rounded-full blur-3xl pointer-events-none"></div>
       <div class="relative z-10 grid grid-cols-1 gap-8 lg:grid-cols-2 items-center">
         <div class="min-w-0">
-          <p class="text-xs font-mono font-semibold uppercase tracking-wider text-brand-400 mb-4">Open source, MCP and A2A</p>
+          <p class="text-xs font-mono font-semibold uppercase tracking-wider text-brand-400 mb-4">For teams letting AI agents change infrastructure</p>
 
           <h1 class="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-white tracking-tight leading-tight mb-4">
-            Independent verification before
-            <span class="bg-gradient-to-r from-brand-400 via-accent-cyan to-accent-violet bg-clip-text text-transparent">AI agents act</span>.
+            Your AI agent wants to delete production.
+            <span class="bg-gradient-to-r from-brand-400 via-accent-cyan to-accent-violet bg-clip-text text-transparent">Who's stopping it?</span>
           </h1>
 
           <p class="text-white font-semibold text-base sm:text-lg leading-relaxed mb-2">
-            A deterministic check on recorded workflow state, not the agent's say-so.</p>
-          <p class="text-slate-300 text-base sm:text-lg leading-relaxed mb-3">
-            Check an agent's proposed action against recorded workflow state and explicit prerequisites before it commits. When a required step is missing, the agent gets a structured answer that says what to run first, or to stop and ask a person.</p>
+            Joltrin blocks a risky step, like dropping a database, until the steps before it are recorded, and tells the agent what to do first.</p>
           <p class="text-slate-400 text-sm leading-relaxed mb-6">
-            A claim that something happened is not evidence that it happened. The check is Go code that runs outside the agent's reasoning, with the same result every time for the same trace. The system that performs the action still has to wait for its answer.
+            You put it in front of the one tool you want protected. Your agent asks Joltrin before it acts. Open source and free to try in your browser.
           </p>
 
           <div class="flex flex-wrap items-center gap-3">
             <a href="./agents/"
                class="px-5 py-3 rounded-xl bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 font-bold text-sm text-black shadow-lg shadow-brand-500/20 flex items-center space-x-2 transition">
               <i data-lucide="shield-check" class="w-4 h-4"></i>
-              <span>Try the live barrier</span>
+              <span>Try to make an agent drop a database</span>
             </a>
-            <a href="https://github.com/SharedCode/joltrin#try-it-in-five-minutes" target="_blank" rel="noopener noreferrer"
+            <a href="#demo-video"
                class="px-5 py-3 rounded-xl bg-dark-900 hover:bg-dark-850 border border-dark-700 text-slate-200 hover:text-white font-semibold text-sm flex items-center space-x-2 transition">
-              <i data-lucide="terminal" class="w-4 h-4 text-brand-400"></i>
-              <span>Quickstart on GitHub</span>
+              <i data-lucide="play" class="w-4 h-4 text-brand-400"></i>
+              <span>Watch the short demo</span>
             </a>
           </div>
           <div class="mt-5 min-w-0">
@@ -1227,6 +1225,32 @@ Error from server: admission webhook "gate.joltrin.dev" denied the request: step
     </section>
 
     <!-- Proof and limits -->
+    <section id="faq" aria-labelledby="faq-h" class="mb-12 p-6 sm:p-10 rounded-2xl bg-dark-900 border border-dark-800">
+      <h2 id="faq-h" class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight leading-snug mb-6">Questions teams ask before trying it</h2>
+      <div class="space-y-3 text-sm text-slate-400 leading-relaxed max-w-3xl">
+        <details class="p-4 rounded-xl bg-dark-950 border border-dark-800">
+          <summary class="font-bold text-white cursor-pointer">What do I have to build?</summary>
+          <p class="mt-2">You name the risky tool and the steps that must come first, then route the agent's call to that tool through Joltrin. It runs in your own environment as a Go library or as an MCP or A2A server. If the agent can reach the tool another way, Joltrin cannot stop that call.</p>
+        </details>
+        <details class="p-4 rounded-xl bg-dark-950 border border-dark-800">
+          <summary class="font-bold text-white cursor-pointer">Can't the agent just say the backup is done?</summary>
+          <p class="mt-2">If the agent records its own steps, yes. Joltrin checks the recorded steps, not the real world. Steps that matter should be recorded by a tool you trust, such as the result of a backup check, and not by the agent's word.</p>
+        </details>
+        <details class="p-4 rounded-xl bg-dark-950 border border-dark-800">
+          <summary class="font-bold text-white cursor-pointer">How is this different from permissions or approval prompts?</summary>
+          <p class="mt-2">Permissions decide who may call a tool. Approvals ask a person every time. Joltrin decides whether the earlier steps happened, so safe orders go through on their own and risky ones wait. Use them together.</p>
+        </details>
+        <details class="p-4 rounded-xl bg-dark-950 border border-dark-800">
+          <summary class="font-bold text-white cursor-pointer">What does Pro add that the free version does not?</summary>
+          <p class="mt-2">The free version is the barrier, the MCP and A2A servers, and this demo, under the MIT license. Pro is for teams: one shared policy for every agent and a record of each allow and block. Some of that code is in the repository already, and bringing it into your setup is design-partner work today.</p>
+        </details>
+        <details class="p-4 rounded-xl bg-dark-950 border border-dark-800">
+          <summary class="font-bold text-white cursor-pointer">How do I buy, and what happens next?</summary>
+          <p class="mt-2">Press Request Pro in the pricing section and fill in the short form. It then shows an Email Us to Start Pro button that opens your mail app with the details filled in; the request is sent when you send that email. We reply and set it up with you. There is no self-serve checkout yet, and you are not charged by clicking.</p>
+        </details>
+      </div>
+    </section>
+
     <section id="limits" class="mb-12 p-6 sm:p-10 rounded-2xl bg-dark-900 border border-dark-800">
       <div class="max-w-3xl mb-6">
         <h2 class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight leading-snug">What is real, what is simulated, what it does not do.</h2>
@@ -1304,7 +1328,7 @@ Error from server: admission webhook "gate.joltrin.dev" denied the request: step
                     class="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-black font-bold text-xs shadow-lg shadow-brand-500/20 flex items-center justify-center transition cursor-pointer">
               Request Pro
             </button>
-            <p class="text-[11px] text-slate-500 mt-2 text-center">Pro is design-partner access today. We reply by email and set it up with you. Self-serve checkout is not switched on yet.</p>
+            <p class="text-[11px] text-slate-500 mt-2 text-center">Pro is design-partner access today. We reply by email and set it up with you. Self-serve checkout is not switched on yet. The policy, record and workspace code exists in the open repository; wiring it into the barrier for your team is the work we do together.</p>
           </div>
         </div>
 
