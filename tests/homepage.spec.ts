@@ -320,4 +320,17 @@ test.describe('Homepage', () => {
       .poll(() => page.locator('main > section').first().evaluate((el) => Number(getComputedStyle(el).opacity)))
       .toBeGreaterThan(0.95);
   });
+  test('quickstart Copy button records a copy_quickstart event', async ({ page }) => {
+    await page.route('**/plausible.io/**', (route) => route.abort());
+    await page.addInitScript(() => {
+      (window as any).__events = [];
+      (window as any).plausible = (name: string) => (window as any).__events.push(name);
+    });
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    const btn = page.locator('#quickstart-copy');
+    await btn.scrollIntoViewIfNeeded();
+    await btn.click();
+    await expect(btn).toHaveText('Copied');
+    expect(await page.evaluate(() => (window as any).__events)).toContain('copy_quickstart');
+  });
 });

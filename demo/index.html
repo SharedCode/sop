@@ -47,6 +47,11 @@
   <script>
     window.plausible = window.plausible || function () { (window.plausible.q = window.plausible.q || []).push(arguments); };
     function track(name) { try { window.plausible(name); } catch (e) {} }
+    function copyQuickstart(btn) {
+      var cmd = document.getElementById('quickstart-cmd').innerText.trim();
+      track('copy_quickstart');
+      try { navigator.clipboard.writeText(cmd); btn.innerText = 'Copied'; } catch (e) {}
+    }
     document.addEventListener('click', function (e) {
       var a = e.target.closest && e.target.closest('a[href]'); if (!a) return;
       var h = a.getAttribute('href') || '';
@@ -658,7 +663,10 @@
           </div>
           <div class="mt-5 min-w-0">
             <p class="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-1.5">Or run it now (Go 1.26.10 or newer)</p>
-            <pre class="rounded-lg bg-dark-950 border border-dark-700 px-3 py-2 font-mono text-xs text-slate-200 overflow-x-auto"><code>go run github.com/sharedcode/joltrin/v5/examples/verify_barrier@latest</code></pre>
+            <div class="relative">
+              <pre id="quickstart-cmd" class="rounded-lg bg-dark-950 border border-dark-700 pl-3 pr-16 py-2 font-mono text-xs text-slate-200 overflow-x-auto"><code>go run github.com/sharedcode/joltrin/v5/examples/verify_barrier@latest</code></pre>
+              <button type="button" id="quickstart-copy" onclick="copyQuickstart(this)" class="absolute right-1.5 top-1.5 px-2 py-0.5 rounded-md bg-dark-800 hover:bg-dark-700 border border-dark-700 text-[11px] font-mono text-slate-300 transition cursor-pointer">Copy</button>
+            </div>
             <p class="text-[11px] text-slate-500 mt-1.5">It checks the recorded trace, not the world. <a href="#limits" class="underline text-brand-400 hover:text-brand-300">What this does not prove</a></p>
           </div>
         </div>
