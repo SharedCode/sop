@@ -243,6 +243,17 @@ test.describe('Homepage', () => {
     }
   });
 
+  test('share preview text matches the hero on the homepage and the agents page', async ({ request }) => {
+    const home = await (await request.get('/')).text();
+    expect(home).toContain('property="og:title" content="Your AI agent wants to delete production.');
+    expect(home).toContain('property="twitter:title" content="Your AI agent wants to delete production.');
+    expect(home).toContain('It checks the recorded trace, not the world.');
+    const agents = await (await request.get('/agents/')).text();
+    const og = agents.match(/property="og:title" content="([^"]+)"/)?.[1];
+    const tw = agents.match(/property="twitter:title" content="([^"]+)"/)?.[1];
+    expect(tw).toBe(og);
+  });
+
   test('page does not scroll sideways', async ({ page }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await waitForWasmReady(page);
