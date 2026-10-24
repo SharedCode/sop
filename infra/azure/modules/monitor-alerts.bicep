@@ -137,15 +137,17 @@ resource restartAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
   }
 }
 
-// Fires when the app has had no running replica for 5 minutes, which is what
-// an outage looks like from outside. Replicas is pinned to 1, so any dip to 0
-// is user visible.
+// Fired when the app had no running replica for 5 minutes. The app now scales
+// to zero when idle, so zero replicas is normal and this alert is disabled.
+// Outages are still caught by the restart-loop and 5xx alerts. It is kept as a
+// disabled resource so an existing deployment turns it off instead of
+// leaving the old enabled copy in place.
 resource noReplicaAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
   name: '${appName}-no-replica'
   location: 'global'
   properties: {
     severity: 0
-    enabled: true
+    enabled: false
     scopes: [
       containerAppId
     ]
