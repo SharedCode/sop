@@ -1,0 +1,193 @@
+name: Deploy site (Cloudflare)
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'demo/**'
+      - 'demo-agents/**'
+      - 'demo-btree/**'
+      - 'docs/assets/**'
+      - 'docs/index.html'
+      - 'scripts/assemble-site.sh'
+      - 'sop-arena/**'
+      - 'deploy/cloudflare/**'
+      - 'wrangler.jsonc'
+      - '.github/workflows/deploy-site.yml'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'preview uploads a version with its own URL, production deploys it live'
+        type: choice
+        options: [preview, production]
+        default: preview
+
+permissions:
+  contents: read
+
+# One deploy at a time; never cancel one that is already running.
+concurrency:
+  group: "site-deploy"
+  cancel-in-progress: false
+
+jobs:
+  build-and-package:
+    name: Build WASM Demo + SOP Arena, Package Site
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Setup Go Toolchain
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Copy Go WebAssembly JavaScript Support (wasm_exec.js)
+        shell: bash
+        run: |
+          set -euo pipefail
+          GOROOT="$(go env GOROOT)"
+          echo "Locating wasm_exec.js in GOROOT: ${GOROOT}"
+
+          # Support modern Go (lib/wasm) and legacy Go (misc/wasm) locations
+          if [ -f "${GOROOT}/lib/wasm/wasm_exec.js" ]; then
+            cp "${GOROOT}/lib/wasm/wasm_exec.js" demo/wasm_exec.js
+            cp "${GOROOT}/lib/wasm/wasm_exec.js" demo-agents/wasm_exec.js
+            cp "${GOROOT}/lib/wasm/wasm_exec.js" demo-btree/wasm_exec.js
+            echo "Copied from ${GOROOT}/lib/wasm/wasm_exec.js"
+          elif [ -f "${GOROOT}/misc/wasm/wasm_exec.js" ]; then
+            cp "${GOROOT}/misc/wasm/wasm_exec.js" demo/wasm_exec.js
+            cp "${GOROOT}/misc/wasm/wasm_exec.js" demo-agents/wasm_exec.js
+            cp "${GOROOT}/misc/wasm/wasm_exec.js" demo-btree/wasm_exec.js
+            echo "Copied from ${GOROOT}/misc/wasm/wasm_exec.js"
+          else
+            echo "Error: wasm_exec.js not found in ${GOROOT}" >&2
+            exit 1
+          fi
+
+      - name: Compile Go Engine to WebAssembly (sop.wasm)
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Compiling SOP embedded engine to WebAssembly..."
+          cd demo
+          # -s -w strips symbol tables and debug information to minimize binary footprint
+          GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o sop.wasm .
+          ls -lh sop.wasm wasm_exec.js index.html
+
+      - name: Compile Agent Verification Barrier to WebAssembly (sop-agents.wasm)
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Compiling verify barrier demo to WebAssembly..."
+          cd demo-agents
+          GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o sop-agents.wasm .
+          ls -lh sop-agents.wasm wasm_exec.js index.html
+
+      - name: Compile Joltrin Arena B-tree challenge to WebAssembly (arena.wasm)
+        shell: bash
+        run: |
+          set -euo pipefail
+          GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o demo-btree/arena.wasm ./demo-btree/wasm
+          ls -lh demo-btree/arena.wasm demo-btree/wasm_exec.js demo-btree/index.html
+
+      - name: Setup Node.js Toolchain
+        uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: 'sop-arena/package-lock.json'
+
+      - name: Install SOP Arena Dependencies
+        working-directory: ./sop-arena
+        run: npm ci || npm install
+
+      - name: Build SOP Arena
+        working-directory: ./sop-arena
+        run: npm run build
+
+      - name: Assemble Combined Site
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The same script the pull request check runs, so what a PR proves is what ships.
+          scripts/assemble-site.sh _site
+          ls -lh _site _site/arena _site/agents _site/assets
+
+      - name: Upload the assembled site
+        uses: actions/upload-artifact@v4
+        with:
+          name: site
+          path: _site
+          retention-days: 7
+
+  deploy:
+    name: Deploy to Cloudflare
+    needs: build-and-package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: site
+          path: _site
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+
+      - name: Deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'production' }}
+        run: |
+          if [ "$MODE" = production ]; then
+            npx --yes wrangler@4 deploy
+          else
+            npx --yes wrangler@4 versions upload
+          fi
+
+  verify-live:
+    name: Open the live site after the deploy
+    needs: deploy
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'production' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install test dependencies and browsers
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Wait for the live site to answer
+        run: |
+          for i in $(seq 1 24); do
+            [ "$(curl -s -o /dev/null -w '%{http_code}' https://joltrinhq.com/)" = 200 ] && exit 0
+            sleep 5
+          done
+          echo "Error: https://joltrinhq.com/ did not answer 200 within two minutes" >&2
+          exit 1
+
+      - name: Open every page of the live site
+        env:
+          CI: true
+          LIVE_SITE: '1'
+          BASE_URL: https://joltrinhq.com
+        run: npx playwright test tests/site-smoke.spec.ts --project=chromium --project=mobile-chrome
+
+      - name: Check the live YouTube embeds
+        run: |
+          curl -fsS https://joltrinhq.com/ -o /tmp/live-index.html
+          mkdir -p /tmp/live && cp /tmp/live-index.html /tmp/live/index.html
+          scripts/check-youtube.sh /tmp/live

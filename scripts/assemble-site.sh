@@ -25,6 +25,8 @@ cp -r sop-arena/dist/. "$SITE/arena/"
 cp demo-agents/index.html demo-agents/tailwind.css demo-agents/sop-agents.wasm demo-agents/wasm_exec.js demo-agents/favicon.svg demo-agents/favicon.ico demo-agents/og-image.png demo-agents/logo-mark.png "$SITE/agents/"
 # Joltrin Arena B-tree challenge (the in-memory B-tree in WASM) lives at joltrinhq.com/btree/
 cp demo-btree/index.html demo-btree/tailwind.css demo-btree/arena.wasm demo-btree/wasm_exec.js demo-btree/favicon.svg demo-btree/favicon.ico demo-btree/og-image.png demo-btree/logo-mark.png "$SITE/btree/"
+# Response headers for the Cloudflare deployment.
+cp deploy/cloudflare/_headers deploy/cloudflare/_redirects "$SITE/"
 # Preserve custom domain (e.g. joltrinhq.com) if CNAME exists
 if [ -f CNAME ]; then
   cp CNAME "$SITE/CNAME"
